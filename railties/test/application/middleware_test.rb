@@ -69,6 +69,14 @@ module ApplicationTests
       assert_equal "Rack::Cache", middleware.first
     end
 
+    test "ActiveRecord::Migration::CheckPending is present when active_record.migration_error is set to :page_load" do
+      add_to_config "config.active_record.migration_error = :page_load"
+
+      boot!
+
+      assert middleware.include?("ActiveRecord::Migration::CheckPending")
+    end
+
     test "ActionDispatch::SSL is present when force_ssl is set" do
       add_to_config "config.force_ssl = true"
       boot!
@@ -80,7 +88,7 @@ module ApplicationTests
       add_to_config "config.ssl_options = { host: 'example.com' }"
       boot!
 
-      assert_equal AppTemplate::Application.middleware.first.args, [{host: 'example.com'}]
+      assert_equal Rails.application.middleware.first.args, [{host: 'example.com'}]
     end
 
     test "removing Active Record omits its middleware" do
@@ -217,7 +225,7 @@ module ApplicationTests
       end
 
       def middleware
-        AppTemplate::Application.middleware.map(&:klass).map(&:name)
+        Rails.application.middleware.map(&:klass).map(&:name)
       end
   end
 end

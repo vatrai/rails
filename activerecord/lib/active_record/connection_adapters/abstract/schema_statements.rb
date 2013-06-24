@@ -214,8 +214,8 @@ module ActiveRecord
       # its block form to do so yourself:
       #
       #   create_join_table :products, :categories do |t|
-      #     t.index :products
-      #     t.index :categories
+      #     t.index :product_id
+      #     t.index :category_id
       #   end
       #
       # ====== Add a backend specific option to the generated SQL (MySQL)
@@ -691,17 +691,6 @@ module ActiveRecord
           column_type_sql
         else
           type
-        end
-      end
-
-      def add_column_options!(sql, options) #:nodoc:
-        sql << " DEFAULT #{quote(options[:default], options[:column])}" if options_include_default?(options)
-        # must explicitly check for :null to allow change_column to work on migrations
-        if options[:null] == false
-          sql << " NOT NULL"
-        end
-        if options[:auto_increment] == true
-          sql << " AUTO_INCREMENT"
         end
       end
 

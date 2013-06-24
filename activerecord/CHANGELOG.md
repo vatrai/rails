@@ -1,3 +1,136 @@
+*   Flatten merged join_values before building the joins.
+   
+    While joining_values special treatment is given to string values.
+    By flattening the array it ensures that string values are detected
+    as strings and not arrays.
+
+    Fixes #10669.
+
+    *Neeraj Singh and iwiznia*
+
+*   Do not load all child records for inverse case.
+
+    currently `post.comments.find(Comment.first.id)` would load all
+    comments for the given post to set the inverse association.
+
+    This has a huge performance penalty. Because if post has 100k
+    records and all these 100k records would be loaded in memory
+    even though the comment id was supplied.
+
+    Fix is to use in-memory records only if loaded? is true. Otherwise
+    load the records using full sql.
+
+    Fixes #10509.
+
+    *Neeraj Singh*
+
+*   `inspect` on Active Record model classes does not initiate a
+    new connection. This means that calling `inspect`, when the
+    database is missing, will no longer raise an exception.
+    Fixes #10936.
+
+    Example:
+
+        Author.inspect # => "Author(no database connection)"
+
+    *Yves Senn*
+
+*   Handle single quotes in PostgreSQL default column values.
+    Fixes #10881.
+
+    *Dylan Markow*
+
+*   Log the sql that is actually sent to the database.
+
+    If I have a query that produces sql
+    `WHERE "users"."name" = 'a         b'` then in the log all the
+    whitespace is being squeezed. So the sql that is printed in the
+    log is `WHERE "users"."name" = 'a b'`.
+
+    Do not squeeze whitespace out of sql queries. Fixes #10982.
+
+    *Neeraj Singh*
+
+*   Fixture setup does no longer depend on `ActiveRecord::Base.configurations`.
+    This is relevant when `ENV["DATABASE_URL"]` is used in place of a `database.yml`.
+
+    *Yves Senn*
+
+*   Fix mysql2 adapter raises the correct exception when executing a query on a
+    closed connection.
+
+    *Yves Senn*
+
+*   Ambiguous reflections are on :through relationships are no longer supported.
+    For example, you need to change this:
+
+        class Author < ActiveRecord::Base
+          has_many :posts
+          has_many :taggings, :through => :posts
+        end
+
+        class Post < ActiveRecord::Base
+          has_one :tagging
+          has_many :taggings
+        end
+
+        class Tagging < ActiveRecord::Base
+        end
+
+    To this:
+
+        class Author < ActiveRecord::Base
+          has_many :posts
+          has_many :taggings, :through => :posts, :source => :tagging
+        end
+
+        class Post < ActiveRecord::Base
+          has_one :tagging
+          has_many :taggings
+        end
+
+        class Tagging < ActiveRecord::Base
+        end
+
+    *Aaron Peterson*
+
+*   Remove column restrictions for `count`, let the database raise if the SQL is
+    invalid. The previous behavior was untested and surprising for the user.
+    Fixes #5554.
+
+    Example:
+
+        User.select("name, username").count
+        # Before => SELECT count(*) FROM users
+        # After => ActiveRecord::StatementInvalid
+
+        # you can still use `count(:all)` to perform a query unrelated to the
+        # selected columns
+        User.select("name, username").count(:all) # => SELECT count(*) FROM users
+
+    *Yves Senn*
+
+*   Rails now automatically detects inverse associations. If you do not set the
+    `:inverse_of` option on the association, then Active Record will guess the
+    inverse association based on heuristics.
+
+    Note that automatic inverse detection only works on `has_many`, `has_one`,
+    and `belongs_to` associations. Extra options on the associations will
+    also prevent the association's inverse from being found automatically.
+
+    The automatic guessing of the inverse association uses a heuristic based
+    on the name of the class, so it may not work for all associations,
+    especially the ones with non-standard names.
+
+    You can turn off the automatic detection of inverse associations by setting
+    the `:inverse_of` option to `false` like so:
+
+        class Taggable < ActiveRecord::Base
+          belongs_to :tag, inverse_of: false
+        end
+
+    *John Wang*
+
 *   Fix `add_column` with `array` option when using PostgreSQL. Fixes #10432
 
     *Adam Anderson*
@@ -19,7 +152,7 @@
 
     *Yves Senn*
 
-*   Fix bug where tiny types are incorectly coerced as booleand when the length is more than 1.
+*   Fix bug where tiny types are incorrectly coerced as boolean when the length is more than 1.
 
     Fixes #10620.
 
@@ -32,7 +165,7 @@
 *   Deprecate `ConnectionAdapters::SchemaStatements#distinct`,
     as it is no longer used by internals.
 
-    *Ben Woosley#
+    *Ben Woosley*
 
 *   Fix pending migrations error when loading schema and `ActiveRecord::Base.table_name_prefix`
     is not blank.
@@ -102,8 +235,8 @@
 
     *Olek Janiszewski*
 
-*   fixes bug introduced by #3329.  Now, when autosaving associations,
-    deletions happen before inserts and saves.  This prevents a 'duplicate
+*   fixes bug introduced by #3329. Now, when autosaving associations,
+    deletions happen before inserts and saves. This prevents a 'duplicate
     unique value' database error that would occur if a record being created had
     the same value on a unique indexed field as that of a record being destroyed.
 
