@@ -1,3 +1,17 @@
+*   Remove Oracle / Sqlserver / Firebird database tasks that were deprecated in 4.0.
+
+    *kennyj*
+
+*   `find_each` now returns an `Enumerator` when called without a block, so that it
+    can be chained with other `Enumerable` methods.
+
+    *Ben Woosley*
+
+*   `ActiveRecord::Result.each` now returns an `Enumerator` when called without
+     a block, so that it can be chained with other `Enumerable` methods.
+
+    *Ben Woosley*
+
 *   Flatten merged join_values before building the joins.
 
     While joining_values special treatment is given to string values.
@@ -92,7 +106,7 @@
         class Tagging < ActiveRecord::Base
         end
 
-    *Aaron Peterson*
+    *Aaron Patterson*
 
 *   Remove column restrictions for `count`, let the database raise if the SQL is
     invalid. The previous behavior was untested and surprising for the user.
@@ -156,7 +170,7 @@
 
     Fixes #10620.
 
-    *Aaron Peterson*
+    *Aaron Patterson*
 
 *   Also support extensions in PostgreSQL 9.1. This feature has been supported since 9.1.
 
