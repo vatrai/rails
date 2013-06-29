@@ -1,3 +1,38 @@
+*   Remove implicit join references that were deprecated in 4.0.
+
+    Example:
+
+        # before with implicit joins
+        Comment.where('posts.author_id' => 7)
+
+        # after
+        Comment.references(:posts).where('posts.author_id' => 7)
+
+    *Yves Senn*
+
+*   Apply default scope when joining associations. For example:
+
+        class Post < ActiveRecord::Base
+          default_scope -> { where published: true }
+        end
+
+        class Comment
+          belongs_to :post
+        end
+
+    When calling `Comment.joins(:post)`, we expect to receive only
+    comments on published posts, since that is the default scope for
+    posts.
+
+    Before this change, the default scope from `Post` was not applied,
+    so we'd get comments on unpublished posts.
+
+    *Jon Leighton*
+
+*   Remove `activerecord-deprecated_finders` as a dependency
+
+    *Łukasz Strzałkowski*
+
 *   Remove Oracle / Sqlserver / Firebird database tasks that were deprecated in 4.0.
 
     *kennyj*

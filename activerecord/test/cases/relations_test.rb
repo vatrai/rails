@@ -368,7 +368,7 @@ class RelationTest < ActiveRecord::TestCase
   def test_respond_to_dynamic_finders
     relation = Topic.all
 
-    ["find_by_title", "find_by_title_and_author_name", "find_or_create_by_title", "find_or_initialize_by_title_and_author_name"].each do |method|
+    ["find_by_title", "find_by_title_and_author_name"].each do |method|
       assert_respond_to relation, method, "Topic.all should respond to #{method.inspect}"
     end
   end
@@ -1208,31 +1208,10 @@ class RelationTest < ActiveRecord::TestCase
     assert_equal "id", Post.all.primary_key
   end
 
-  def test_eager_loading_with_conditions_on_joins
-    scope = Post.includes(:comments)
-
-    # This references the comments table, and so it should cause the comments to be eager
-    # loaded via a JOIN, rather than by subsequent queries.
-    scope = scope.joins(
-      Post.arel_table.create_join(
-        Post.arel_table,
-        Post.arel_table.create_on(Comment.arel_table[:id].eq(3))
-      )
-    )
-
+  def test_disable_implicit_join_references_is_deprecated
     assert_deprecated do
-      assert scope.eager_loading?
+      ActiveRecord::Base.disable_implicit_join_references = true
     end
-  end
-
-  def test_turn_off_eager_loading_with_conditions_on_joins
-    original_value = ActiveRecord::Base.disable_implicit_join_references
-    ActiveRecord::Base.disable_implicit_join_references = true
-
-    scope = Topic.where(author_email_address: 'my.example@gmail.com').includes(:replies)
-    assert_not scope.eager_loading?
-  ensure
-    ActiveRecord::Base.disable_implicit_join_references = original_value
   end
 
   def test_ordering_with_extra_spaces

@@ -230,16 +230,16 @@ Blog::Application.routes.draw do
   # first created -> highest priority.
   # ...
   # You can have the root of your site routed with "root"
-  # root to: "welcome#index"
+  # root "welcome#index"
 ```
 
-This is your application's _routing file_ which holds entries in a special DSL (domain-specific language) that tells Rails how to connect incoming requests to controllers and actions. This file contains many sample routes on commented lines, and one of them actually shows you how to connect the root of your site to a specific controller and action. Find the line beginning with `root :to` and uncomment it. It should look something like the following:
+This is your application's _routing file_ which holds entries in a special DSL (domain-specific language) that tells Rails how to connect incoming requests to controllers and actions. This file contains many sample routes on commented lines, and one of them actually shows you how to connect the root of your site to a specific controller and action. Find the line beginning with `root` and uncomment it. It should look something like the following:
 
 ```ruby
-root to: "welcome#index"
+root "welcome#index"
 ```
 
-The `root to: "welcome#index"` tells Rails to map requests to the root of the application to the welcome controller's index action and `get "welcome/index"` tells Rails to map requests to <http://localhost:3000/welcome/index> to the welcome controller's index action. This was created earlier when you ran the controller generator (`rails generate controller welcome index`).
+The `root "welcome#index"` tells Rails to map requests to the root of the application to the welcome controller's index action and `get "welcome/index"` tells Rails to map requests to <http://localhost:3000/welcome/index> to the welcome controller's index action. This was created earlier when you ran the controller generator (`rails generate controller welcome index`).
 
 If you navigate to <http://localhost:3000> in your browser, you'll see the `Hello, Rails!` message you put into `app/views/welcome/index.html.erb`, indicating that this new route is indeed going to `WelcomeController`'s `index` action and is rendering the view correctly.
 
@@ -252,15 +252,15 @@ Now that you've seen how to create a controller, an action and a view, let's cre
 
 In the Blog application, you will now create a new _resource_. A resource is the term used for a collection of similar objects, such as posts, people or animals. You can create, read, update and destroy items for a resource and these operations are referred to as _CRUD_ operations.
 
-Rails provides a `resources` method which can be used to declare a
-standard REST resource. Here's how `config/routes.rb` will look like.
+Rails provides a `resources` method which can be used to declare a standard REST resource.
+Here's what `config/routes.rb` should look like after the _post resource_ is declared.
 
 ```ruby
 Blog::Application.routes.draw do
 
   resources :posts
 
-  root to: "welcome#index"
+  root "welcome#index"
 end
 ```
 
@@ -1659,7 +1659,7 @@ Two very common sources of data that are not UTF-8:
   in the browser. This also applies to your i18n translation files.
   Most editors that do not already default to UTF-8 (such as some versions of
   Dreamweaver) offer a way to change the default to UTF-8. Do so.
-* Your database. Rails defaults to converting data from your database into UTF-8 at
+* Your database: Rails defaults to converting data from your database into UTF-8 at
   the boundary. However, if your database is not using UTF-8 internally, it may not
   be able to store all characters that your users enter. For instance, if your database
   is using Latin-1 internally, and your user enters a Russian, Hebrew, or Japanese

@@ -52,7 +52,7 @@ Major Features
 
 TODO. Give a list and then talk about each of them briefly. We can point to relevant code commits or documentation from these sections.
 
-![Rails 4.0](images/rails4_features.png)
+[![Rails 4.0](images/rails4_features.png)](http://guides.rubyonrails.org/images/rails4_features.png)
 
 Extraction of features to gems
 ---------------------------
@@ -88,6 +88,10 @@ Please refer to the [Changelog](https://github.com/rails/rails/blob/master/railt
 * Your app's executables now live in the `bin/` directory. Run `rake rails:update:bin` to get `bin/bundle`, `bin/rails`, and `bin/rake`.
 
 * Threadsafe on by default
+
+* Ability to use a custom builder by passing `--builder` (or `-b`) to
+  `rails new` has been removed. Consider using application templates
+  instead. ([Pull Request](https://github.com/rails/rails/pull/9401))
 
 ### Deprecations
 

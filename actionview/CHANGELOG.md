@@ -1,3 +1,12 @@
+*   Pick `DateField` `DateTimeField` and `ColorField` values from stringified options allowing use of symbol keys with helpers.
+
+    *Jon Rowe*
+
+*   Remove the deprecated `prompt` argument from `grouped_options_for_select`,
+    pass in a `:prompt` hash option to use this feature.
+
+    *kennyj*
+
 *   Always escape the result of `link_to_unless` method.
 
     Before:

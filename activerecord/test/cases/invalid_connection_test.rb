@@ -1,20 +1,22 @@
 require "cases/helper"
-require "models/bird"
 
 class TestAdapterWithInvalidConnection < ActiveRecord::TestCase
   self.use_transactional_fixtures = false
 
+  class Bird < ActiveRecord::Base
+  end
+
   def setup
-    @spec = ActiveRecord::Base.connection_config
-    non_existing_spec = {adapter: @spec[:adapter], database: "i_do_not_exist"}
-    ActiveRecord::Base.establish_connection(non_existing_spec)
+    # Can't just use current adapter; sqlite3 will create a database
+    # file on the fly.
+    Bird.establish_connection adapter: 'mysql', database: 'i_do_not_exist'
   end
 
   def teardown
-    ActiveRecord::Base.establish_connection(@spec)
+    Bird.remove_connection
   end
 
   test "inspect on Model class does not raise" do
-    assert_equal "Bird(no database connection)", Bird.inspect
+    assert_equal "#{Bird.name}(no database connection)", Bird.inspect
   end
 end
