@@ -612,11 +612,16 @@ we want to accept in our controllers. In this case, we want to allow the
 look like this:
 
 ```
-  def create
-    @post = Post.new(params[:post].permit(:title, :text))
+def create
+  @post = Post.new(post_params)
 
-    @post.save
-    redirect_to @post
+  @post.save
+  redirect_to @post
+end
+
+private
+  def post_params
+    params.require(:post).permit(:title, :text)
   end
 ```
 
@@ -767,7 +772,7 @@ def new
 end
 
 def create
-  @post = Post.new(params[:post].permit(:title, :text))
+  @post = Post.new(post_params)
 
   if @post.save
     redirect_to @post
@@ -775,6 +780,11 @@ def create
     render 'new'
   end
 end
+
+private
+  def post_params
+    params.require(:post).permit(:title, :text)
+  end
 ```
 
 The `new` action is now creating a new instance variable called `@post`, and
@@ -905,18 +915,25 @@ Next we need to create the `update` action in `app/controllers/posts_controller.
 def update
   @post = Post.find(params[:id])
 
-  if @post.update(params[:post].permit(:title, :text))
+  if @post.update(post_params)
     redirect_to @post
   else
     render 'edit'
   end
 end
+
+private
+  def post_params
+    params.require(:post).permit(:title, :text)
+  end
 ```
 
 The new method, `update`, is used when you want to update a record
 that already exists, and it accepts a hash containing the attributes
 that you want to update. As before, if there was an error updating the
 post we want to show the form back to the user.
+
+We reuse the `post_params` method that we defined earlier for the create action.
 
 TIP: You don't need to pass all attributes to `update`. For
 example, if you'd call `@post.update(title: 'A new title')`
@@ -1062,7 +1079,7 @@ You can call `destroy` on Active Record objects when you want to delete
 them from the database. Note that we don't need to add a view for this
 action since we're redirecting to the `index` action.
 
-Finally, add a 'destroy' link to your `index` action template
+Finally, add a 'Destroy' link to your `index` action template
 (`app/views/posts/index.html.erb`) to wrap everything
 together.
 
@@ -1088,8 +1105,8 @@ together.
 </table>
 ```
 
-Here we're using `link_to` in a different way. We pass the named route as the first argument,
-and then the final two keys as another argument. The `:method` and `:'data-confirm'`
+Here we're using `link_to` in a different way. We pass the named route as the second argument,
+and then the options as another argument. The `:method` and `:'data-confirm'`
 options are used as HTML5 attributes so that when the link is clicked,
 Rails will first show a confirm dialog to the user, and then submit the link with method `delete`.
 This is done via the JavaScript file `jquery_ujs` which is automatically included
@@ -1303,9 +1320,14 @@ Let's wire up the `create` in `app/controllers/comments_controller.rb`:
 class CommentsController < ApplicationController
   def create
     @post = Post.find(params[:post_id])
-    @comment = @post.comments.create(params[:comment].permit(:commenter, :body))
+    @comment = @post.comments.create(comment_params)
     redirect_to post_path(@post)
   end
+
+  private
+    def comment_params
+      params.require(:comment).permit(:commenter, :body)
+    end
 end
 ```
 
@@ -1527,10 +1549,9 @@ controller (`app/controllers/comments_controller.rb`):
 
 ```ruby
 class CommentsController < ApplicationController
-
   def create
     @post = Post.find(params[:post_id])
-    @comment = @post.comments.create(params[:comment])
+    @comment = @post.comments.create(comment_params)
     redirect_to post_path(@post)
   end
 
@@ -1541,6 +1562,10 @@ class CommentsController < ApplicationController
     redirect_to post_path(@post)
   end
 
+  private
+    def comment_params
+      params.require(:comment).permit(:commenter, :body)
+    end
 end
 ```
 
