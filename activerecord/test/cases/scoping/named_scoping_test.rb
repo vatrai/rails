@@ -435,24 +435,13 @@ class NamedScopingTest < ActiveRecord::TestCase
     end
   end
 
-  def test_eager_scopes_are_deprecated
+  def test_eager_default_scope_relations_are_remove
     klass = Class.new(ActiveRecord::Base)
     klass.table_name = 'posts'
 
-    assert_deprecated do
-      klass.scope :welcome_2, klass.where(:id => posts(:welcome).id)
-    end
-    assert_equal [posts(:welcome).title], klass.welcome_2.map(&:title)
-  end
-
-  def test_eager_default_scope_relations_are_deprecated
-    klass = Class.new(ActiveRecord::Base)
-    klass.table_name = 'posts'
-
-    assert_deprecated do
+    assert_raises(ArgumentError) do
       klass.send(:default_scope, klass.where(:id => posts(:welcome).id))
     end
-    assert_equal [posts(:welcome).title], klass.all.map(&:title)
   end
 
   def test_subclass_merges_scopes_properly

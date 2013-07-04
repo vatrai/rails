@@ -1,3 +1,12 @@
+*   Remove the deprecated `include_seconds` argument from `distance_of_time_in_words`,
+    pass in an `:include_seconds` hash option to use this feature.
+
+    *Carlos Antonio da Silva*
+
+*   Remove deprecated block passing to `FormBuilder#new`.
+
+    *Vipul A M*
+
 *   Pick `DateField` `DateTimeField` and `ColorField` values from stringified options allowing use of symbol keys with helpers.
 
     *Jon Rowe*

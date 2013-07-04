@@ -88,20 +88,8 @@ module ActiveRecord
     end
 
     module ClassMethods
-      def inherited(child_class) #:nodoc:
-        child_class.initialize_generated_modules
-        super
-      end
-
       def initialize_generated_modules
-        @attribute_methods_mutex = Mutex.new
-
-        # force attribute methods to be higher in inheritance hierarchy than other generated methods
-        generated_attribute_methods.const_set(:AttrNames, Module.new {
-          def self.const_missing(name)
-            const_set(name, [name.to_s.sub(/ATTR_/, '')].pack('h*').freeze)
-          end
-        })
+        super
 
         generated_feature_methods
       end
@@ -335,14 +323,6 @@ module ActiveRecord
     # Marks this record as read only.
     def readonly!
       @readonly = true
-    end
-
-    # Returns the connection currently associated with the class. This can
-    # also be used to "borrow" the connection to do database work that isn't
-    # easily done without going straight to SQL.
-    def connection
-      ActiveSupport::Deprecation.warn("#connection is deprecated in favour of accessing it via the class")
-      self.class.connection
     end
 
     def connection_handler
