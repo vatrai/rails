@@ -941,9 +941,9 @@ Creates a form and a scope around a specific model object that is used as a base
 ```html+erb
 <%= form_for @post do |f| %>
   <%= f.label :title, 'Title' %>:
-  <%= f.text_field :title %><br />
+  <%= f.text_field :title %><br>
   <%= f.label :body, 'Body' %>:
-  <%= f.text_area :body %><br />
+  <%= f.text_area :body %><br>
 <% end %>
 ```
 
@@ -1492,7 +1492,7 @@ number_to_human_size(1234567)       # => 1.2 MB
 Formats a number as a percentage string.
 
 ```ruby
-number_to_percentage(100, :precision => 0)        # => 100%
+number_to_percentage(100, precision: 0)        # => 100%
 ```
 
 #### number_to_phone
