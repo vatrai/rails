@@ -1,3 +1,16 @@
+*   Added generated unit test for generator generator using new
+    `test:generators` rake task.
+
+    *Josef Šimánek*
+
+*   Removed `update:application_controller` rake task.
+
+    *Josef Šimánek*
+
+*   Fix `rake environment` to do not eager load modules
+
+    *Paul Nikitochkin*
+
 *   Fix `rake notes` to look into `*.sass` files
 
     *Yuri Artemev*

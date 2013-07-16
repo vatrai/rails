@@ -113,8 +113,13 @@ module AbstractController
       end
 
       def test_controller_raise_error_about_missing_helper
-        e = assert_raise(Helpers::ClassMethods::MissingHelperError) { AbstractInvalidHelpers.helper(:missing) }
+        e = assert_raise(AbstractController::Helpers::MissingHelperError) { AbstractInvalidHelpers.helper(:missing) }
         assert_equal "Missing helper file helpers/missing_helper.rb", e.message
+      end
+
+      def test_missing_helper_error_has_the_right_path
+        e = assert_raise(AbstractController::Helpers::MissingHelperError) { AbstractInvalidHelpers.helper(:missing) }
+        assert_equal "helpers/missing_helper.rb", e.path
       end
     end
   end

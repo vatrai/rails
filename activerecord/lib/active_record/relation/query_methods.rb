@@ -280,16 +280,18 @@ module ActiveRecord
       args.flatten!
       validate_order_args args
 
-      references = args.reject { |arg| Arel::Node === arg }
+      references = args.grep(String)
       references.map! { |arg| arg =~ /^([a-zA-Z]\w*)\.(\w+)/ && $1 }.compact!
       references!(references) if references.any?
 
       # if a symbol is given we prepend the quoted table name
-      args = args.map { |arg|
-        arg.is_a?(Symbol) ? "#{quoted_table_name}.#{arg} ASC" : arg
+      args.map! { |arg|
+        arg.is_a?(Symbol) ?
+          Arel::Nodes::Ascending.new(klass.arel_table[arg]) :
+          arg
       }
 
-      self.order_values = args + self.order_values
+      self.order_values = args.concat self.order_values
       self
     end
 

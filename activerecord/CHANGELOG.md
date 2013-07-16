@@ -1,3 +1,52 @@
+*   Fix bug when using Mysql2 adapter where in some cases, boolean values were
+    being output in sql as `t` or `f` instead of `1` or `0`. Example:
+
+        class Model < ActiveRecord::Base
+          validates_uniqueness_of :boolean_col
+        end
+        Model.first.valid?
+
+    Previously generated sql:
+
+        SELECT 1 AS one FROM `models` WHERE
+          `models`.`boolean_col` = BINARY 'f' LIMIT 1
+
+    With fix:
+
+        SELECT 1 AS one FROM `models` WHERE
+          `models`.`boolean_col` = BINARY 0 LIMIT 1
+
+    Fixes: #11119
+
+    *Adam Williams*
+
+*   `change_column` for PostgreSQL adapter respects the `:array` option.
+
+    *Yves Senn*
+
+*   Remove deprecation warning from `attribute_missing` for attributes that are columns.
+
+    *Arun Agrawal*
+
+*   Remove extra decrement of transaction deep level.
+
+    Fixes: #4566
+
+    *Paul Nikitochkin*
+
+*   Reset @column_defaults when assigning `locking_column`.
+    We had a potential problem. For example:
+
+    class Post < ActiveRecord::Base
+      self.column_defaults  # if we call this unintentionally before setting locking_column ...
+      self.locking_column = 'my_locking_column'
+    end
+
+    Post.column_defaults["my_locking_column"]
+    => nil # expected value is 0 !
+
+    *kennyj*
+
 *   Remove extra select and update queries on save/touch/destroy ActiveRecord model
     with belongs to reflection with option `touch: true`.
 
