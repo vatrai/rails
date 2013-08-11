@@ -453,6 +453,11 @@ class TransactionTest < ActiveRecord::TestCase
         raise ActiveRecord::Rollback
       end
     end
+
+   ensure
+    Topic.reset_column_information # reset the column information to get correct reading
+    Topic.connection.remove_column('topics', 'stuff') if Topic.column_names.include?('stuff')
+    Topic.reset_column_information # reset the column information again for other tests
   end
 
   def test_transactions_state_from_rollback
@@ -540,6 +545,8 @@ if current_adapter?(:PostgreSQLAdapter)
     # This will cause transactions to overlap and fail unless they are performed on
     # separate database connections.
     def test_transaction_per_thread
+      skip "in memory db can't share a db between threads" if in_memory_db?
+
       threads = 3.times.map do
         Thread.new do
           Topic.transaction do

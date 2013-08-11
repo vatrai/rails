@@ -209,6 +209,37 @@ logger.tagged("BCX", "Jason") { logger.info "Stuff" }                   # Logs "
 logger.tagged("BCX") { logger.tagged("Jason") { logger.info "Stuff" } } # Logs "[BCX] [Jason] Stuff"
 ```
 
+### Impact of Logs on Performance
+Logging will always have a small impact on performance of your rails app, 
+        particularly when logging to disk.However, there are a few subtleties:
+
+Using the `:debug` level will have a greater performance penalty than `:fatal`,
+      as a far greater number of strings are being evaluated and written to the
+      log output (e.g. disk).
+
+Another potential pitfall is that if you have many calls to `Logger` like this
+      in your code:
+
+```ruby
+logger.debug "Person attributes hash: #{@person.attributes.inspect}"
+```
+
+In the above example, There will be a performance impact even if the allowed 
+output level doesn't include debug. The reason is that Ruby has to evaluate 
+these strings, which includes instantiating the somewhat heavy `String` object 
+and interpolating the variables, and which takes time.
+Therefore, it's recommended to pass blocks to the logger methods, as these are 
+only evaluated if the output level is the same or included in the allowed level 
+(i.e. lazy loading). The same code rewritten would be:
+
+```ruby
+logger.debug {"Person attibutes hash: #{@person.attributes.inspect}"}
+```
+
+The contents of the block, and therefore the string interpolation, is only 
+evaluated if debug is enabled. This performance savings is only really 
+noticeable with large amounts of logging, but it's a good practice to employ.
+
 Debugging with the `debugger` gem
 ---------------------------------
 
@@ -301,7 +332,7 @@ This command shows you where you are in the code by printing 10 lines centered a
    7
    8      respond_to do |format|
    9        format.html # index.html.erb
-   10        format.json { render :json => @posts }
+   10        format.json { render json: @posts }
 ```
 
 If you repeat the `list` command, this time using just `l`, the next ten lines of the file will be printed out.
@@ -337,7 +368,7 @@ On the other hand, to see the previous ten lines you should type `list-` (or `l-
    7
    8      respond_to do |format|
    9        format.html # index.html.erb
-   10        format.json { render :json => @posts }
+   10        format.json { render json: @posts }
 ```
 
 This way you can move inside the file, being able to see the code above and over the line you added the `debugger`.

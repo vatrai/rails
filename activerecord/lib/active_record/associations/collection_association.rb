@@ -34,7 +34,7 @@ module ActiveRecord
           reload
         end
 
-        @proxy ||= CollectionProxy.new(klass, self)
+        @proxy ||= CollectionProxy.create(klass, self)
       end
 
       # Implements the writer method, e.g. foo.items= for Foo.has_many :items
@@ -510,20 +510,13 @@ module ActiveRecord
 
         def callback(method, record)
           callbacks_for(method).each do |callback|
-            case callback
-            when Symbol
-              owner.send(callback, record)
-            when Proc
-              callback.call(owner, record)
-            else
-              callback.send(method, owner, record)
-            end
+            callback.call(method, owner, record)
           end
         end
 
         def callbacks_for(callback_name)
           full_callback_name = "#{callback_name}_for_#{reflection.name}"
-          owner.class.send(full_callback_name.to_sym) || []
+          owner.class.send(full_callback_name)
         end
 
         # Should we deal with assoc.first or assoc.last by issuing an independent query to

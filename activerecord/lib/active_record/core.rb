@@ -134,19 +134,18 @@ module ActiveRecord
 
       # Returns the Arel engine.
       def arel_engine
-        @arel_engine ||= begin
+        @arel_engine ||=
           if Base == self || connection_handler.retrieve_connection_pool(self)
             self
           else
             superclass.arel_engine
           end
-        end
       end
 
       private
 
       def relation #:nodoc:
-        relation = Relation.new(self, arel_table)
+        relation = Relation.create(self, arel_table)
 
         if finder_needs_type_condition?
           relation.where(type_condition).create_with(inheritance_column.to_sym => sti_name)
@@ -347,7 +346,7 @@ module ActiveRecord
 
     # Returns a hash of the given methods with their names as keys and returned values as values.
     def slice(*methods)
-      Hash[methods.map { |method| [method, public_send(method)] }].with_indifferent_access
+      Hash[methods.map! { |method| [method, public_send(method)] }].with_indifferent_access
     end
 
     def set_transaction_state(state) # :nodoc:

@@ -117,6 +117,18 @@ class TimeExtCalculationsTest < ActiveSupport::TestCase
     end
   end
 
+  def test_middle_of_day
+    assert_equal Time.local(2005,2,4,12,0,0), Time.local(2005,2,4,10,10,10).middle_of_day
+    with_env_tz 'US/Eastern' do
+      assert_equal Time.local(2006,4,2,12,0,0), Time.local(2006,4,2,10,10,10).middle_of_day, 'start DST'
+      assert_equal Time.local(2006,10,29,12,0,0), Time.local(2006,10,29,10,10,10).middle_of_day, 'ends DST'
+    end
+    with_env_tz 'NZ' do
+      assert_equal Time.local(2006,3,19,12,0,0), Time.local(2006,3,19,10,10,10).middle_of_day, 'ends DST'
+      assert_equal Time.local(2006,10,1,12,0,0), Time.local(2006,10,1,10,10,10).middle_of_day, 'start DST'
+    end
+  end
+
   def test_beginning_of_hour
     assert_equal Time.local(2005,2,4,19,0,0), Time.local(2005,2,4,19,30,10).beginning_of_hour
   end
@@ -509,6 +521,9 @@ class TimeExtCalculationsTest < ActiveSupport::TestCase
     with_env_tz "US/Central" do
       assert_equal "Thu, 05 Feb 2009 14:30:05 -0600", Time.local(2009, 2, 5, 14, 30, 5).to_s(:rfc822)
       assert_equal "Mon, 09 Jun 2008 04:05:01 -0500", Time.local(2008, 6, 9, 4, 5, 1).to_s(:rfc822)
+      assert_equal "2009-02-05T14:30:05-06:00", Time.local(2009, 2, 5, 14, 30, 5).to_s(:iso8601)
+      assert_equal "2008-06-09T04:05:01-05:00", Time.local(2008, 6, 9, 4, 5, 1).to_s(:iso8601)
+      assert_equal "2009-02-05T14:30:05Z", Time.utc(2009, 2, 5, 14, 30, 5).to_s(:iso8601)
     end
   end
 

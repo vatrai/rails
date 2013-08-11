@@ -393,9 +393,14 @@ The form will be making a `POST` request to `/posts/:post_id/comments`, which wi
 ```ruby
 def create
   @post = Post.find(params[:post_id])
-  @comment = @post.comments.create(params[:comment])
+  @comment = @post.comments.create(comment_params)
   flash[:notice] = "Comment has been created!"
   redirect_to posts_path
+end
+
+private
+def comment_params
+  params.require(:comment).permit(:text)
 end
 ```
 
@@ -518,6 +523,14 @@ First, the `author_name` text field needs to be added to the `app/views/blorgh/p
   <%= f.label :author_name %><br>
   <%= f.text_field :author_name %>
 </div>
+```
+
+Next, we need to update our `Blorgh::PostController#post_params` method to permit the new form parameter:
+
+```ruby
+def post_params
+  params.require(:post).permit(:title, :text, :author_name)
+end
 ```
 
 The `Blorgh::Post` model should then have some code to convert the `author_name` field into an actual `User` object and associate it as that post's `author` before the post is saved. It will also need to have an `attr_accessor` setup for this field so that the setter and getter methods are defined for it.

@@ -1,3 +1,32 @@
+*   Fix an issue where :if and :unless controller action procs were being run
+    before checking for the correct action in the :only and :unless options.
+
+    Fixes #11799
+
+    *Nicholas Jakobsen*
+
+*   Fix an issue where `assert_dom_equal` and `assert_dom_not_equal` were
+    ignoring the passed failure message argument.
+
+    Fixes #11751
+
+    *Ryan McGeary*
+
+*   Allow REMOTE_ADDR, HTTP_HOST and HTTP_USER_AGENT to be overridden from
+    the environment passed into `ActionDispatch::TestRequest.new`.
+
+    Fixes #11590
+
+    *Andrew White*
+
+*   Fix an issue where Journey was failing to clear the named routes hash when the
+    routes were reloaded and since it doesn't overwrite existing routes then if a
+    route changed but wasn't renamed it kept the old definition. This was being
+    masked by the optimised url helpers so it only became apparent when passing an
+    options hash to the url helper.
+
+    *Andrew White*
+
 *   Skip routes pointing to a redirect or mounted application when generating urls
     using an options hash as they aren't relevant and generate incorrect urls.
 
