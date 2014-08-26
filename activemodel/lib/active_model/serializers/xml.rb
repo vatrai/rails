@@ -1,4 +1,4 @@
-require 'active_support/core_ext/class/attribute_accessors'
+require 'active_support/core_ext/module/attribute_accessors'
 require 'active_support/core_ext/array/conversions'
 require 'active_support/core_ext/hash/conversions'
 require 'active_support/core_ext/hash/slice'
@@ -84,7 +84,7 @@ module ActiveModel
           @builder = options[:builder]
           @builder.instruct! unless options[:skip_instruct]
 
-          root = (options[:root] || @serializable.class.model_name.element).to_s
+          root = (options[:root] || @serializable.model_name.element).to_s
           root = ActiveSupport::XmlMini.rename_key(root, options)
 
           args = [root]

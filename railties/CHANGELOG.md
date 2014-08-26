@@ -1,85 +1,154 @@
-*   Fix the event name of action_dispatch requests.
+*   The [web-console](https://github.com/rails/web-console) gem is now
+    installed by default for new applications. It can help you debug
+    development exceptions by spawnig an interactive console in its cause
+    binding.
+
+    *Ryan Dao*, *Genadi Samokovarov*, *Guillermo Iguaran*
+
+*   Add a `required` option to the model generator for associations
+
+    *Sean Griffin*
+
+*   Add `after_bundle` callbacks in Rails templates. Useful for allowing the
+    generated binstubs to be added to version control.
+
+    Fixes #16292.
+
+    *Stefan Kanev*
+
+*   Pull in the custom configuration concept from dhh/custom_configuration, which allows you to
+    configure your own code through the Rails configuration object with custom configuration:
+
+        # config/environments/production.rb
+        config.x.payment_processing.schedule = :daily
+        config.x.payment_processing.retries  = 3
+        config.x.super_debugger              = true
+
+    These configuration points are then available through the configuration object:
+
+        Rails.configuration.x.payment_processing.schedule # => :daily
+        Rails.configuration.x.payment_processing.retries  # => 3
+        Rails.configuration.x.super_debugger              # => true
+
+    *DHH*
+
+*   Scaffold generator `_form` partial adds `class="field"` for password
+    confirmation fields.
+
+    *noinkling*
+
+*   Add `Rails::Application.config_for` to load a configuration for the current
+    environment.
+
+        # config/exception_notification.yml:
+        production:
+          url: http://127.0.0.1:8080
+          namespace: my_app_production
+        development:
+          url: http://localhost:3001
+          namespace: my_app_development
+
+        # config/production.rb
+        MyApp::Application.configure do
+          config.middleware.use ExceptionNotifier, config_for(:exception_notification)
+        end
+
+    *Rafael Mendonça França*, *DHH*
+
+*   Deprecate `Rails::Rack::LogTailer` without replacement.
 
     *Rafael Mendonça França*
 
-*   Make `config.log_level` work with custom loggers.
+*   Add a generic --skip-gems options to generator
 
-    *Max Shytikov*
+    This option is useful if users want to remove some gems like jbuilder,
+    turbolinks, coffee-rails, etc that don't have specific options on the
+    generator.
 
-*   Changed stylesheet load order in the stylesheet manifest generator.
-    Fixes #11639.
+        rails new my_app --skip-gems turbolinks coffee-rails
 
-    *Pawel Janiak*
+    *Rafael Mendonça França*
 
-*   Added generated unit test for generator generator using new
-    `test:generators` rake task.
-
-    *Josef Šimánek*
-
-*   Removed `update:application_controller` rake task.
-
-    *Josef Šimánek*
-
-*   Fix `rake environment` to do not eager load modules
-
-    *Paul Nikitochkin*
-
-*   Fix `rake notes` to look into `*.sass` files
-
-    *Yuri Artemev*
-
-*   Removed deprecated `Rails.application.railties.engines`.
-
-    *Arun Agrawal*
-
-*   Removed deprecated threadsafe! from Rails Config.
-
-    *Paul Nikitochkin*
-
-*   Remove deprecated `ActiveRecord::Generators::ActiveModel#update_attributes` in
-    favor of `ActiveRecord::Generators::ActiveModel#update`
-
-    *Vipul A M*
-
-*   Remove deprecated `config.whiny_nils` option
-
-    *Vipul A M*
-
-*   Rename `commands/plugin_new.rb` to `commands/plugin.rb` and fix references
+*   Invalid `bin/rails generate` commands will now show spelling suggestions.
 
     *Richard Schneeman*
 
-*   Fix `rails plugin --help` command.
+*   Add `bin/setup` script to bootstrap an application.
 
-    *Richard Schneeman*
+    *Yves Senn*
 
-*   Omit turbolinks configuration completely on skip_javascript generator option.
+*   Replace double quotes with single quotes while adding an entry into Gemfile.
 
-    *Nikita Fedyashev*
+    *Alexander Belaev*
 
-*   Removed deprecated rake tasks for running tests: `rake test:uncommitted` and
-    `rake test:recent`.
+*   Default `config.assets.digest` to `true` in development.
 
-    *John Wang*
+    *Dan Kang*
 
-*   Clearing autoloaded constants triggers routes reloading.
-    Fixes #10685.
+*   Load database configuration from the first `database.yml` available in paths.
 
-    *Xavier Noria*
+    *Pier-Olivier Thibault*
 
-*   Fixes bug with scaffold generator with `--assets=false --resource-route=false`.
-    Fixes #9525.
+*   Reading name and email from git for plugin gemspec.
+
+    Fixes #9589.
+
+    *Arun Agrawal*, *Abd ar-Rahman Hamidi*, *Roman Shmatov*
+
+*   Fix `console` and `generators` blocks defined at different environments.
+
+    Fixes #14748.
+
+    *Rafael Mendonça França*
+
+*   Move configuration of asset precompile list and version to an initializer.
+
+    *Matthew Draper*
+
+*   Remove sqlite3 lines from `.gitignore` if the application is not using sqlite3.
+
+    *Dmitrii Golub*
+
+*   Add public API to register new extensions for `rake notes`.
+
+    Example:
+
+        config.annotations.register_extensions("scss", "sass") { |tag| /\/\/\s*(#{tag}):?\s*(.*)$/ }
+
+    *Roberto Miranda*
+
+*   Removed unnecessary `rails application` command.
 
     *Arun Agrawal*
 
-*   Rails::Railtie no longer forces the Rails::Configurable module on everything
-    that subclasses it. Instead, the methods from Rails::Configurable have been
-    moved to class methods in Railtie and the Railtie has been made abstract.
+*   Make the `rails:template` rake task load the application's initializers.
 
-    *John Wang*
+    Fixes #12133.
 
-*   Changes repetitive th tags to use colspan attribute in `index.html.erb` template.
+    *Robin Dupret*
 
-    *Sıtkı Bağdat*
+*   Introduce `Rails.gem_version` as a convenience method to return
+    `Gem::Version.new(Rails.version)`, suggesting a more reliable way to perform
+    version comparison.
 
-Please check [4-0-stable](https://github.com/rails/rails/blob/4-0-stable/railties/CHANGELOG.md) for previous changes.
+    Example:
+
+        Rails.version #=> "4.1.2"
+        Rails.gem_version #=> #<Gem::Version "4.1.2">
+
+        Rails.version > "4.1.10" #=> false
+        Rails.gem_version > Gem::Version.new("4.1.10") #=> true
+        Gem::Requirement.new("~> 4.1.2") =~ Rails.gem_version #=> true
+
+    *Prem Sichanugrist*
+
+*   Avoid namespacing routes inside engines.
+
+    Mountable engines are namespaced by default so the generated routes
+    were too while they should not.
+
+    Fixes #14079.
+
+    *Yves Senn*, *Carlos Antonio da Silva*, *Robin Dupret*
+
+Please check [4-1-stable](https://github.com/rails/rails/blob/4-1-stable/railties/CHANGELOG.md) for previous changes.

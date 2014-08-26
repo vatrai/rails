@@ -4,33 +4,25 @@ require 'cases/helper'
 require 'models/topic'
 require 'models/reply'
 require 'models/custom_reader'
-require 'models/automobile'
 
 require 'active_support/json'
 require 'active_support/xml_mini'
 
 class ValidationsTest < ActiveModel::TestCase
-
   class CustomStrictValidationException < StandardError; end
 
-  def setup
-    Topic._validators.clear
-  end
-
-  # Most of the tests mess with the validations of Topic, so lets repair it all the time.
-  # Other classes we mess with will be dealt with in the specific tests
   def teardown
-    Topic.reset_callbacks(:validate)
+    Topic.clear_validators!
   end
 
   def test_single_field_validation
     r = Reply.new
     r.title = "There's no content!"
-    assert r.invalid?, "A reply without content shouldn't be savable"
+    assert r.invalid?, "A reply without content should be invalid"
     assert r.after_validation_performed, "after_validation callback should be called"
 
     r.content = "Messa content!"
-    assert r.valid?, "A reply with content should be savable"
+    assert r.valid?, "A reply with content should be valid"
     assert r.after_validation_performed, "after_validation callback should be called"
   end
 
@@ -146,6 +138,8 @@ class ValidationsTest < ActiveModel::TestCase
     assert_equal 4, hits
     assert_equal %w(gotcha gotcha), t.errors[:title]
     assert_equal %w(gotcha gotcha), t.errors[:content]
+  ensure
+    CustomReader.clear_validators!
   end
 
   def test_validate_block
@@ -169,6 +163,13 @@ class ValidationsTest < ActiveModel::TestCase
     assert_raises(NoMethodError) do
       t = Topic.new
       t.valid?
+    end
+  end
+
+  def test_invalid_options_to_validate
+    assert_raises(ArgumentError) do
+      # A common mistake -- we meant to call 'validates'
+      Topic.validate :title, presence: true
     end
   end
 
@@ -288,15 +289,30 @@ class ValidationsTest < ActiveModel::TestCase
   end
 
   def test_validations_on_the_instance_level
-    auto = Automobile.new
+    Topic.validates :title, :author_name, presence: true
+    Topic.validates :content, length: { minimum: 10 }
 
-    assert          auto.invalid?
-    assert_equal 2, auto.errors.size
+    topic = Topic.new
+    assert topic.invalid?
+    assert_equal 3, topic.errors.size
 
-    auto.make  = 'Toyota'
-    auto.model = 'Corolla'
+    topic.title = 'Some Title'
+    topic.author_name = 'Some Author'
+    topic.content = 'Some Content Whose Length is more than 10.'
+    assert topic.valid?
+  end
 
-    assert auto.valid?
+  def test_validate
+    Topic.validate do
+      validates_presence_of :title, :author_name
+      validates_length_of :content, minimum: 10
+    end
+
+    topic = Topic.new
+    assert_empty topic.errors
+
+    topic.validate
+    assert_not_empty topic.errors
   end
 
   def test_strict_validation_in_validates
@@ -373,25 +389,4 @@ class ValidationsTest < ActiveModel::TestCase
     assert topic.invalid?
     assert duped.valid?
   end
-
-   # validator test:
-  def test_setup_is_deprecated_but_still_receives_klass # TODO: remove me in 4.2.
-    validator_class = Class.new(ActiveModel::Validator) do
-      def setup(klass)
-        @old_klass = klass
-      end
-
-      def validate(*)
-        @old_klass == Topic or raise "#setup didn't work"
-      end
-    end
-
-    assert_deprecated do
-      Topic.validates_with validator_class
-    end
-
-    t = Topic.new
-    t.valid?
-  end
-
 end

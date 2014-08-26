@@ -2,6 +2,8 @@ require 'pathname'
 
 module Rails
   module AppRailsLoader
+    extend self
+
     RUBY = Gem.ruby
     EXECUTABLES = ['bin/rails', 'script/rails']
     BUNDLER_WARNING = <<EOS
@@ -26,7 +28,7 @@ generate it and add it to source control:
 
 EOS
 
-    def self.exec_app_rails
+    def exec_app_rails
       original_cwd = Dir.pwd
 
       loop do
@@ -49,13 +51,13 @@ EOS
         # call to generate a new application, so restore the original cwd.
         Dir.chdir(original_cwd) and return if Pathname.new(Dir.pwd).root?
 
-        # Otherwise keep moving upwards in search of a executable.
+        # Otherwise keep moving upwards in search of an executable.
         Dir.chdir('..')
       end
     end
 
-    def self.find_executable
-      EXECUTABLES.find { |exe| File.exists?(exe) }
+    def find_executable
+      EXECUTABLES.find { |exe| File.file?(exe) }
     end
   end
 end

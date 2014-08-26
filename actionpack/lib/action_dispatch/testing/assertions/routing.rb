@@ -165,7 +165,7 @@ module ActionDispatch
 
       # ROUTES TODO: These assertions should really work in an integration context
       def method_missing(selector, *args, &block)
-        if defined?(@controller) && @controller && @routes && @routes.named_routes.helpers.include?(selector)
+        if defined?(@controller) && @controller && @routes && @routes.named_routes.route_defined?(selector)
           @controller.send(selector, *args, &block)
         else
           super
@@ -211,7 +211,7 @@ module ActionDispatch
         def fail_on(exception_class)
           yield
         rescue exception_class => e
-          raise MiniTest::Assertion, e.message
+          raise Minitest::Assertion, e.message
         end
     end
   end

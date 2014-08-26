@@ -3,7 +3,7 @@ namespace :rails do
   task update: [ "update:configs", "update:bin" ]
 
   desc "Applies the template supplied by LOCATION=(/path/to/template) or URL"
-  task :template do
+  task template: :environment do
     template = ENV["LOCATION"]
     raise "No LOCATION value given. Please set LOCATION either as path to a file or a URL" if template.blank?
     template = File.expand_path(template) if template !~ %r{\A[A-Za-z][A-Za-z0-9+\-\.]*://}
@@ -46,7 +46,7 @@ namespace :rails do
         require 'rails/generators/rails/app/app_generator'
         gen = Rails::Generators::AppGenerator.new ["rails"], { with_dispatchers: true },
                                                              destination_root: Rails.root
-        File.exists?(Rails.root.join("config", "application.rb")) ?
+        File.exist?(Rails.root.join("config", "application.rb")) ?
           gen.send(:app_const) : gen.send(:valid_const?)
         gen
       end
@@ -55,7 +55,7 @@ namespace :rails do
     # desc "Update config/boot.rb from your current rails install"
     task :configs do
       invoke_from_app_generator :create_boot_file
-      invoke_from_app_generator :create_config_files
+      invoke_from_app_generator :update_config_files
     end
 
     # desc "Adds new executables to the application bin/ directory"

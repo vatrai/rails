@@ -48,7 +48,7 @@ module ActionController
       # You can pass any of the following options to affect the redirect status and response
       # * <tt>status</tt>     - Redirect with a custom status (default is 301 Moved Permanently)
       # * <tt>flash</tt>      - Set a flash message when redirecting
-      # * <tt>alert</tt>      - Set a alert message when redirecting
+      # * <tt>alert</tt>      - Set an alert message when redirecting
       # * <tt>notice</tt>     - Set a notice message when redirecting
       #
       # ==== Action Options
@@ -85,7 +85,7 @@ module ActionController
         if host_or_options.is_a?(Hash)
           options.merge!(host_or_options)
         elsif host_or_options
-          options.merge!(:host => host_or_options)
+          options[:host] = host_or_options
         end
 
         secure_url = ActionDispatch::Http::URL.url_for(options.slice(*URL_OPTIONS))

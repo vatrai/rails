@@ -1,5 +1,4 @@
 require 'abstract_unit'
-require 'action_view/vendor/html-scanner'
 require 'controller/fake_controllers'
 
 class ActionPackAssertionsController < ActionController::Base
@@ -38,6 +37,8 @@ class ActionPackAssertionsController < ActionController::Base
   def redirect_to_named_route() redirect_to route_one_url end
 
   def redirect_external() redirect_to "http://www.rubyonrails.org"; end
+
+  def redirect_external_protocol_relative() redirect_to "//www.rubyonrails.org"; end
 
   def response404() head '404 AWOL' end
 
@@ -145,11 +146,6 @@ end
 
 class ActionPackAssertionsControllerTest < ActionController::TestCase
 
-  def test_assert_tag_and_url_for
-    get :render_url
-    assert_tag :content => "/action_pack_assertions/flash_me"
-  end
-
   def test_render_file_absolute_path
     get :render_file_absolute_path
     assert_match(/\A= Action Pack/, @response.body)
@@ -163,24 +159,24 @@ class ActionPackAssertionsControllerTest < ActionController::TestCase
   def test_get_request
     assert_raise(RuntimeError) { get :raise_exception_on_get }
     get :raise_exception_on_post
-    assert_equal @response.body, 'request method: GET'
+    assert_equal 'request method: GET', @response.body
   end
 
   def test_post_request
     assert_raise(RuntimeError) { post :raise_exception_on_post }
     post :raise_exception_on_get
-    assert_equal @response.body, 'request method: POST'
+    assert_equal 'request method: POST', @response.body
   end
 
   def test_get_post_request_switch
     post :raise_exception_on_get
-    assert_equal @response.body, 'request method: POST'
+    assert_equal 'request method: POST', @response.body
     get :raise_exception_on_post
-    assert_equal @response.body, 'request method: GET'
+    assert_equal 'request method: GET', @response.body
     post :raise_exception_on_get
-    assert_equal @response.body, 'request method: POST'
+    assert_equal 'request method: POST', @response.body
     get :raise_exception_on_post
-    assert_equal @response.body, 'request method: GET'
+    assert_equal 'request method: GET', @response.body
   end
 
   def test_string_constraint
@@ -258,6 +254,19 @@ class ActionPackAssertionsControllerTest < ActionController::TestCase
     end
   end
 
+  def test_assert_redirect_failure_message_with_protocol_relative_url
+    begin
+      process :redirect_external_protocol_relative
+      assert_redirected_to "/foo"
+    rescue ActiveSupport::TestCase::Assertion => ex
+      assert_no_match(
+        /#{request.protocol}#{request.host}\/\/www.rubyonrails.org/,
+        ex.message,
+        'protocol relative url was incorrectly normalized'
+      )
+    end
+  end
+
   def test_template_objects_exist
     process :assign_this
     assert !@controller.instance_variable_defined?(:"@hi")
@@ -287,7 +296,7 @@ class ActionPackAssertionsControllerTest < ActionController::TestCase
 
   def test_session_exist
     process :session_stuffing
-    assert_equal session['xmas'], 'turkey'
+    assert_equal 'turkey', session['xmas']
   end
 
   def session_does_not_exist
@@ -309,6 +318,9 @@ class ActionPackAssertionsControllerTest < ActionController::TestCase
 
     process :redirect_external
     assert_equal 'http://www.rubyonrails.org', @response.redirect_url
+
+    process :redirect_external_protocol_relative
+    assert_equal '//www.rubyonrails.org', @response.redirect_url
   end
 
   def test_no_redirect_url
@@ -426,22 +438,18 @@ class ActionPackAssertionsControllerTest < ActionController::TestCase
 
   def test_assert_response_uses_exception_message
     @controller = AssertResponseWithUnexpectedErrorController.new
-    get :index
+    e = assert_raise RuntimeError, 'Expected non-success response' do
+      get :index
+    end
     assert_response :success
-    flunk 'Expected non-success response'
-  rescue RuntimeError => e
-    assert e.message.include?('FAIL')
+    assert_includes 'FAIL', e.message
   end
 
   def test_assert_response_failure_response_with_no_exception
     @controller = AssertResponseWithUnexpectedErrorController.new
     get :show
-    assert_response :success
-    flunk 'Expected non-success response'
-  rescue ActiveSupport::TestCase::Assertion
-    # success
-  rescue
-    flunk "assert_response failed to handle failure response with missing, but optional, exception."
+    assert_response 500
+    assert_equal 'Boom', response.body
   end
 end
 
@@ -473,6 +481,11 @@ class AssertTemplateTest < ActionController::TestCase
     get :render_file_absolute_path
     assert_raise(ActiveSupport::TestCase::Assertion) do
       assert_template :file => 'test/hello_world'
+    end
+
+    get :render_file_absolute_path
+    assert_raise(ActiveSupport::TestCase::Assertion) do
+      assert_template file: nil
     end
   end
 
@@ -598,6 +611,24 @@ class AssertTemplateTest < ActionController::TestCase
 
     get :nothing
     assert_template nil
+
+    get :partial
+    assert_template partial: 'test/_partial'
+
+    get :nothing
+    assert_template partial: nil
+
+    get :render_with_layout
+    assert_template layout: 'layouts/standard'
+
+    get :nothing
+    assert_template layout: nil
+
+    get :render_file_relative_path
+    assert_template file: 'README.rdoc'
+
+    get :nothing
+    assert_template file: nil
   end
 end
 

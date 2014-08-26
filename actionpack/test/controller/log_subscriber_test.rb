@@ -85,7 +85,7 @@ class ACLogSubscriberTest < ActionController::TestCase
 
     @old_logger = ActionController::Base.logger
 
-    @cache_path = File.expand_path('../temp/test_cache', File.dirname(__FILE__))
+    @cache_path = File.join Dir.tmpdir, Dir::Tmpname.make_tmpname('tmp', 'cache')
     @controller.cache_store = :file_store, @cache_path
     ActionController::LogSubscriber.attach_to :action_controller
   end
@@ -135,6 +135,17 @@ class ACLogSubscriberTest < ActionController::TestCase
 
     assert_equal 3, logs.size
     assert_equal 'Parameters: {"id"=>"10"}', logs[1]
+  end
+
+  def test_multiple_process_with_parameters
+    get :show, :id => '10'
+    get :show, :id => '20'
+
+    wait
+
+    assert_equal 6, logs.size
+    assert_equal 'Parameters: {"id"=>"10"}', logs[1]
+    assert_equal 'Parameters: {"id"=>"20"}', logs[4]
   end
 
   def test_process_action_with_wrapped_parameters

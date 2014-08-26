@@ -1,6 +1,7 @@
 require 'active_support/core_ext/kernel/reporting'
 require 'active_support/file_update_checker'
 require 'rails/engine/configuration'
+require 'rails/source_annotation_extractor'
 
 module Rails
   class Application
@@ -12,7 +13,7 @@ module Rails
                     :railties_order, :relative_url_root, :secret_key_base, :secret_token,
                     :serve_static_assets, :ssl_options, :static_cache_control, :session_options,
                     :time_zone, :reload_classes_only_on_change,
-                    :beginning_of_week, :filter_redirect
+                    :beginning_of_week, :filter_redirect, :x
 
       attr_writer :log_level
       attr_reader :encoding
@@ -47,6 +48,7 @@ module Rails
         @eager_load                    = nil
         @secret_token                  = nil
         @secret_key_base               = nil
+        @x                             = Custom.new
 
         @assets = ActiveSupport::OrderedOptions.new
         @assets.enabled                  = true
@@ -76,6 +78,7 @@ module Rails
         @paths ||= begin
           paths = super
           paths.add "config/database",    with: "config/database.yml"
+          paths.add "config/secrets",     with: "config/secrets.yml"
           paths.add "config/environment", with: "config/environment.rb"
           paths.add "lib/templates"
           paths.add "log",                with: "log/#{Rails.env}.log"
@@ -87,25 +90,34 @@ module Rails
         end
       end
 
-      # Loads and returns the configuration of the database.
+      # Loads and returns the entire raw configuration of database from
+      # values stored in `config/database.yml`.
       def database_configuration
-        yaml = paths["config/database"].first
-        if File.exists?(yaml)
+        yaml = Pathname.new(paths["config/database"].existent.first || "")
+
+        config = if yaml.exist?
+          require "yaml"
           require "erb"
-          YAML.load ERB.new(IO.read(yaml)).result
+          YAML.load(ERB.new(yaml.read).result) || {}
         elsif ENV['DATABASE_URL']
-          nil
+          # Value from ENV['DATABASE_URL'] is set to default database connection
+          # by Active Record.
+          {}
         else
           raise "Could not load database configuration. No such file - #{yaml}"
         end
+
+        config
       rescue Psych::SyntaxError => e
         raise "YAML syntax error occurred while parsing #{paths["config/database"].first}. " \
               "Please note that YAML must be consistently indented using spaces. Tabs are not allowed. " \
               "Error: #{e.message}"
+      rescue => e
+        raise e, "Cannot load `Rails.application.database_configuration`:\n#{e.message}", e.backtrace
       end
 
       def log_level
-        @log_level ||= Rails.env.production? ? :info : :debug
+        @log_level ||= :debug
       end
 
       def colorize_logging
@@ -140,6 +152,26 @@ module Rails
         end
       end
 
+      def annotations
+        SourceAnnotationExtractor::Annotation
+      end
+
+      private
+        class Custom #:nodoc:
+          def initialize
+            @configurations = Hash.new
+          end
+
+          def method_missing(method, *args)
+            if method =~ /=$/
+              @configurations[$`.to_sym] = args.first
+            else
+              @configurations.fetch(method) {
+                @configurations[method] = ActiveSupport::OrderedOptions.new
+              }
+            end
+          end
+        end
     end
   end
 end

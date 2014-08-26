@@ -25,10 +25,17 @@ module Rails
 
   autoload :Info
   autoload :InfoController
+  autoload :MailersController
   autoload :WelcomeController
 
   class << self
-    attr_accessor :application, :cache, :logger
+    @application = @app_class = nil
+
+    attr_writer :application
+    attr_accessor :app_class, :cache, :logger
+    def application
+      @application ||= (app_class.instance if app_class)
+    end
 
     delegate :initialize!, :initialized?, to: :application
 
@@ -77,10 +84,6 @@ module Rails
       groups.compact!
       groups.uniq!
       groups
-    end
-
-    def version
-      VERSION::STRING
     end
 
     def public_path

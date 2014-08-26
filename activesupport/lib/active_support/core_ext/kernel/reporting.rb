@@ -31,9 +31,13 @@ module Kernel
 
   # For compatibility
   def silence_stderr #:nodoc:
+    ActiveSupport::Deprecation.warn(
+      "#silence_stderr is deprecated and will be removed in the next release"
+    ) #not thread-safe
     silence_stream(STDERR) { yield }
   end
 
+  # Deprecated : this method is not thread safe
   # Silences any stream for the duration of the block.
   #
   #   silence_stream(STDOUT) do
@@ -41,6 +45,8 @@ module Kernel
   #   end
   #
   #   puts 'But this will'
+  #
+  # This method is not thread-safe.
   def silence_stream(stream)
     old_stream = stream.dup
     stream.reopen(RbConfig::CONFIG['host_os'] =~ /mswin|mingw/ ? 'NUL:' : '/dev/null')
@@ -48,6 +54,7 @@ module Kernel
     yield
   ensure
     stream.reopen(old_stream)
+    old_stream.close
   end
 
   # Blocks and ignores any exception passed as argument if raised within the block.
@@ -60,8 +67,7 @@ module Kernel
   #   puts 'This code gets executed and nothing related to ZeroDivisionError was seen'
   def suppress(*exception_classes)
     yield
-  rescue Exception => e
-    raise unless exception_classes.any? { |cls| e.kind_of?(cls) }
+  rescue *exception_classes
   end
 
   # Captures the given stream and returns it:
@@ -80,6 +86,9 @@ module Kernel
   #   stream = capture(:stderr) { system('echo error 1>&2') }
   #   stream # => "error\n"
   def capture(stream)
+    ActiveSupport::Deprecation.warn(
+      "#capture(stream) is deprecated and will be removed in the next release"
+    ) #not thread-safe
     stream = stream.to_s
     captured_stream = Tempfile.new(stream)
     stream_io = eval("$#{stream}")
@@ -100,7 +109,12 @@ module Kernel
   # Silences both STDOUT and STDERR, even for subprocesses.
   #
   #   quietly { system 'bundle install' }
+  #
+  # This method is not thread-safe.
   def quietly
+    ActiveSupport::Deprecation.warn(
+      "#quietly is deprecated and will be removed in the next release"
+    ) #not thread-safe
     silence_stream(STDOUT) do
       silence_stream(STDERR) do
         yield

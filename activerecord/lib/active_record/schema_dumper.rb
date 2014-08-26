@@ -17,9 +17,19 @@ module ActiveRecord
     cattr_accessor :ignore_tables
     @@ignore_tables = []
 
-    def self.dump(connection=ActiveRecord::Base.connection, stream=STDOUT)
-      new(connection).dump(stream)
-      stream
+    class << self
+      def dump(connection=ActiveRecord::Base.connection, stream=STDOUT, config = ActiveRecord::Base)
+        new(connection, generate_options(config)).dump(stream)
+        stream
+      end
+
+      private
+        def generate_options(config)
+          {
+            table_name_prefix: config.table_name_prefix,
+            table_name_suffix: config.table_name_suffix
+          }
+        end
     end
 
     def dump(stream)
@@ -32,10 +42,11 @@ module ActiveRecord
 
     private
 
-      def initialize(connection)
+      def initialize(connection, options = {})
         @connection = connection
         @types = @connection.native_database_types
         @version = Migrator::current_version rescue nil
+        @options = options
       end
 
       def header(stream)
@@ -80,16 +91,17 @@ HEADER
       end
 
       def tables(stream)
-        @connection.tables.sort.each do |tbl|
-          next if ['schema_migrations', ignore_tables].flatten.any? do |ignored|
-            case ignored
-            when String; remove_prefix_and_suffix(tbl) == ignored
-            when Regexp; remove_prefix_and_suffix(tbl) =~ ignored
-            else
-              raise StandardError, 'ActiveRecord::SchemaDumper.ignore_tables accepts an array of String and / or Regexp values.'
-            end
+        sorted_tables = @connection.tables.sort
+
+        sorted_tables.each do |table_name|
+          table(table_name, stream) unless ignored?(table_name)
+        end
+
+        # dump foreign keys at the end to make sure all dependent tables exist.
+        if @connection.supports_foreign_keys?
+          sorted_tables.each do |tbl|
+            foreign_keys(tbl, stream)
           end
-          table(tbl, stream)
         end
       end
 
@@ -101,7 +113,8 @@ HEADER
           # first dump primary key column
           if @connection.respond_to?(:pk_and_sequence_for)
             pk, _ = @connection.pk_and_sequence_for(table)
-          elsif @connection.respond_to?(:primary_key)
+          end
+          if !pk && @connection.respond_to?(:primary_key)
             pk = @connection.primary_key(table)
           end
 
@@ -112,6 +125,7 @@ HEADER
               tbl.print %Q(, primary_key: "#{pk}")
             elsif pkcol.sql_type == 'uuid'
               tbl.print ", id: :uuid"
+              tbl.print %Q(, default: "#{pkcol.default_function}") if pkcol.default_function
             end
           else
             tbl.print ", id: false"
@@ -200,8 +214,49 @@ HEADER
         end
       end
 
+      def foreign_keys(table, stream)
+        if (foreign_keys = @connection.foreign_keys(table)).any?
+          add_foreign_key_statements = foreign_keys.map do |foreign_key|
+            parts = [
+                     'add_foreign_key ' + remove_prefix_and_suffix(foreign_key.from_table).inspect,
+                     remove_prefix_and_suffix(foreign_key.to_table).inspect,
+                    ]
+
+            if foreign_key.column != @connection.foreign_key_column_for(foreign_key.to_table)
+              parts << ('column: ' + foreign_key.column.inspect)
+            end
+
+            if foreign_key.custom_primary_key?
+              parts << ('primary_key: ' + foreign_key.primary_key.inspect)
+            end
+
+            if foreign_key.name !~ /^fk_rails_[0-9a-f]{10}$/
+              parts << ('name: ' + foreign_key.name.inspect)
+            end
+
+            parts << ('on_update: ' + foreign_key.on_update.inspect) if foreign_key.on_update
+            parts << ('on_delete: ' + foreign_key.on_delete.inspect) if foreign_key.on_delete
+
+            '  ' + parts.join(', ')
+          end
+
+          stream.puts add_foreign_key_statements.sort.join("\n")
+        end
+      end
+
       def remove_prefix_and_suffix(table)
-        table.gsub(/^(#{ActiveRecord::Base.table_name_prefix})(.+)(#{ActiveRecord::Base.table_name_suffix})$/,  "\\2")
+        table.gsub(/^(#{@options[:table_name_prefix]})(.+)(#{@options[:table_name_suffix]})$/,  "\\2")
+      end
+
+      def ignored?(table_name)
+        ['schema_migrations', ignore_tables].flatten.any? do |ignored|
+          case ignored
+          when String; remove_prefix_and_suffix(table_name) == ignored
+          when Regexp; remove_prefix_and_suffix(table_name) =~ ignored
+          else
+            raise StandardError, 'ActiveRecord::SchemaDumper.ignore_tables accepts an array of String and / or Regexp values.'
+          end
+        end
       end
   end
 end

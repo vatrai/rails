@@ -1,3 +1,5 @@
+require 'active_support/core_ext/module/attribute_accessors'
+
 # This is the parent Association class which defines the variables
 # used by all associations.
 #
@@ -8,36 +10,51 @@
 #      - HasOneAssociation
 #    - CollectionAssociation
 #      - HasManyAssociation
-#      - HasAndBelongsToManyAssociation
 
 module ActiveRecord::Associations::Builder
   class Association #:nodoc:
     class << self
       attr_accessor :extensions
+      # TODO: This class accessor is needed to make activerecord-deprecated_finders work.
+      # We can move it to a constant in 5.0.
+      attr_accessor :valid_options
     end
     self.extensions = []
 
-    VALID_OPTIONS = [:class_name, :foreign_key, :validate]
+    self.valid_options = [:class_name, :class, :foreign_key, :validate]
 
     attr_reader :name, :scope, :options
 
     def self.build(model, name, scope, options, &block)
+      if model.dangerous_attribute_method?(name)
+        raise ArgumentError, "You tried to define an association named #{name} on the model #{model.name}, but " \
+                             "this will conflict with a method #{name} already defined by Active Record. " \
+                             "Please choose a different association name."
+      end
+
+      builder = create_builder model, name, scope, options, &block
+      reflection = builder.build(model)
+      define_accessors model, reflection
+      define_callbacks model, reflection
+      define_validations model, reflection
+      builder.define_extensions model
+      reflection
+    end
+
+    def self.create_builder(model, name, scope, options, &block)
       raise ArgumentError, "association names must be a Symbol" unless name.kind_of?(Symbol)
 
+      new(model, name, scope, options, &block)
+    end
+
+    def initialize(model, name, scope, options)
+      # TODO: Move this to create_builder as soon we drop support to activerecord-deprecated_finders.
       if scope.is_a?(Hash)
         options = scope
         scope   = nil
       end
 
-      builder = new(name, scope, options, &block)
-      reflection = builder.build(model)
-      builder.define_accessors model
-      builder.define_callbacks model, reflection
-      builder.define_extensions model
-      reflection
-    end
-
-    def initialize(name, scope, options)
+      # TODO: Remove this model argument as soon we drop support to activerecord-deprecated_finders.
       @name    = name
       @scope   = scope
       @options = options
@@ -58,7 +75,7 @@ module ActiveRecord::Associations::Builder
     end
 
     def valid_options
-      VALID_OPTIONS + Association.extensions.flat_map(&:valid_options)
+      Association.valid_options + Association.extensions.flat_map(&:valid_options)
     end
 
     def validate_options
@@ -68,8 +85,12 @@ module ActiveRecord::Associations::Builder
     def define_extensions(model)
     end
 
-    def define_callbacks(model, reflection)
-      add_before_destroy_callbacks(model, name) if options[:dependent]
+    def self.define_callbacks(model, reflection)
+      if dependent = reflection.options[:dependent]
+        check_dependent_options(dependent)
+        add_destroy_callbacks(model, reflection)
+      end
+
       Association.extensions.each do |extension|
         extension.build model, reflection
       end
@@ -81,14 +102,14 @@ module ActiveRecord::Associations::Builder
     # end
     #
     # Post.first.comments and Post.first.comments= methods are defined by this method...
-
-    def define_accessors(model)
-      mixin = model.generated_feature_methods
-      define_readers(mixin)
-      define_writers(mixin)
+    def self.define_accessors(model, reflection)
+      mixin = model.generated_association_methods
+      name = reflection.name
+      define_readers(mixin, name)
+      define_writers(mixin, name)
     end
 
-    def define_readers(mixin)
+    def self.define_readers(mixin, name)
       mixin.class_eval <<-CODE, __FILE__, __LINE__ + 1
         def #{name}(*args)
           association(:#{name}).reader(*args)
@@ -96,7 +117,7 @@ module ActiveRecord::Associations::Builder
       CODE
     end
 
-    def define_writers(mixin)
+    def self.define_writers(mixin, name)
       mixin.class_eval <<-CODE, __FILE__, __LINE__ + 1
         def #{name}=(value)
           association(:#{name}).writer(value)
@@ -104,17 +125,24 @@ module ActiveRecord::Associations::Builder
       CODE
     end
 
-    def valid_dependent_options
+    def self.define_validations(model, reflection)
+      # noop
+    end
+
+    def self.valid_dependent_options
       raise NotImplementedError
     end
 
     private
 
-    def add_before_destroy_callbacks(model, name)
-      unless valid_dependent_options.include? options[:dependent]
-        raise ArgumentError, "The :dependent option must be one of #{valid_dependent_options}, but is :#{options[:dependent]}"
+    def self.check_dependent_options(dependent)
+      unless valid_dependent_options.include? dependent
+        raise ArgumentError, "The :dependent option must be one of #{valid_dependent_options}, but is :#{dependent}"
       end
+    end
 
+    def self.add_destroy_callbacks(model, reflection)
+      name = reflection.name
       model.before_destroy lambda { |o| o.association(name).handle_dependency }
     end
   end

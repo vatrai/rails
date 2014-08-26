@@ -74,7 +74,9 @@ module ActiveRecord
         :rename_index, :rename_column, :add_index, :remove_index, :add_timestamps, :remove_timestamps,
         :change_column_default, :add_reference, :remove_reference, :transaction,
         :drop_join_table, :drop_table, :execute_block, :enable_extension,
-        :change_column, :execute, :remove_columns, # irreversible methods need to be here too
+        :change_column, :execute, :remove_columns, :change_column_null,
+        :add_foreign_key, :remove_foreign_key
+       # irreversible methods need to be here too
       ].each do |method|
         class_eval <<-EOV, __FILE__, __LINE__ + 1
           def #{method}(*args, &block)          # def create_table(*args, &block)
@@ -85,8 +87,8 @@ module ActiveRecord
       alias :add_belongs_to :add_reference
       alias :remove_belongs_to :remove_reference
 
-      def change_table(table_name, options = {})
-        yield ConnectionAdapters::Table.new(table_name, self)
+      def change_table(table_name, options = {}) # :nodoc:
+        yield delegate.update_table_definition(table_name, self)
       end
 
       private
@@ -140,7 +142,12 @@ module ActiveRecord
 
       def invert_add_index(args)
         table, columns, options = *args
-        [:remove_index, [table, (options || {}).merge(column: columns)]]
+        options ||= {}
+
+        index_name = options[:name]
+        options_hash = index_name ? { name: index_name } : { column: columns }
+
+        [:remove_index, [table, options_hash]]
       end
 
       def invert_remove_index(args)
@@ -157,11 +164,33 @@ module ActiveRecord
       alias :invert_add_belongs_to :invert_add_reference
       alias :invert_remove_belongs_to :invert_remove_reference
 
+      def invert_change_column_null(args)
+        args[2] = !args[2]
+        [:change_column_null, args]
+      end
+
+      def invert_add_foreign_key(args)
+        from_table, to_table, add_options = args
+        add_options ||= {}
+
+        if add_options[:name]
+          options = { name: add_options[:name] }
+        elsif add_options[:column]
+          options = { column: add_options[:column] }
+        else
+          options = to_table
+        end
+
+        [:remove_foreign_key, [from_table, options]]
+      end
+
       # Forwards any missing method call to the \target.
       def method_missing(method, *args, &block)
-        @delegate.send(method, *args, &block)
-      rescue NoMethodError => e
-        raise e, e.message.sub(/ for #<.*$/, " via proxy for #{@delegate}")
+        if @delegate.respond_to?(method)
+          @delegate.send(method, *args, &block)
+        else
+          super
+        end
       end
     end
   end

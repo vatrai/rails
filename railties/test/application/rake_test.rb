@@ -111,7 +111,7 @@ module ApplicationTests
       RUBY
 
       output = Dir.chdir(app_path){ `rake routes` }
-      assert_equal "Prefix Verb URI Pattern     Controller#Action\ncart GET /cart(.:format) cart#show\n", output
+      assert_equal "Prefix Verb URI Pattern     Controller#Action\n  cart GET  /cart(.:format) cart#show\n", output
     end
 
     def test_rake_routes_with_controller_environment
@@ -124,7 +124,7 @@ module ApplicationTests
 
       ENV['CONTROLLER'] = 'cart'
       output = Dir.chdir(app_path){ `rake routes` }
-      assert_equal "Prefix Verb URI Pattern     Controller#Action\ncart GET /cart(.:format) cart#show\n", output
+      assert_equal "Prefix Verb URI Pattern     Controller#Action\n  cart GET  /cart(.:format) cart#show\n", output
     end
 
     def test_rake_routes_displays_message_when_no_routes_are_defined
@@ -187,7 +187,7 @@ module ApplicationTests
     def test_scaffold_tests_pass_by_default
       output = Dir.chdir(app_path) do
         `rails generate scaffold user username:string password:string;
-         bundle exec rake db:migrate db:test:clone test`
+         bundle exec rake db:migrate test`
       end
 
       assert_match(/7 runs, 13 assertions, 0 failures, 0 errors/, output)
@@ -197,7 +197,7 @@ module ApplicationTests
     def test_scaffold_with_references_columns_tests_pass_by_default
       output = Dir.chdir(app_path) do
         `rails generate scaffold LineItems product:references cart:belongs_to;
-         bundle exec rake db:migrate db:test:clone test`
+         bundle exec rake db:migrate test`
       end
 
       assert_match(/7 runs, 13 assertions, 0 failures, 0 errors/, output)
@@ -208,7 +208,8 @@ module ApplicationTests
       add_to_config "config.active_record.schema_format = :sql"
       output = Dir.chdir(app_path) do
         `rails generate scaffold user username:string;
-         bundle exec rake db:migrate db:test:clone 2>&1 --trace`
+         bundle exec rake db:migrate;
+         bundle exec rake db:test:clone 2>&1 --trace`
       end
       assert_match(/Execute db:test:clone_structure/, output)
     end
@@ -217,7 +218,8 @@ module ApplicationTests
       add_to_config "config.active_record.schema_format = :sql"
       output = Dir.chdir(app_path) do
         `rails generate scaffold user username:string;
-         bundle exec rake db:migrate db:test:prepare 2>&1 --trace`
+         bundle exec rake db:migrate;
+         bundle exec rake db:test:prepare 2>&1 --trace`
       end
       assert_match(/Execute db:test:load_structure/, output)
     end
@@ -227,7 +229,7 @@ module ApplicationTests
         # ensure we have a schema_migrations table to dump
         `bundle exec rake db:migrate db:structure:dump DB_STRUCTURE=db/my_structure.sql`
       end
-      assert File.exists?(File.join(app_path, 'db', 'my_structure.sql'))
+      assert File.exist?(File.join(app_path, 'db', 'my_structure.sql'))
     end
 
     def test_rake_dump_structure_should_be_called_twice_when_migrate_redo
@@ -248,26 +250,37 @@ module ApplicationTests
          rails generate model product name:string;
          bundle exec rake db:migrate db:schema:cache:dump`
       end
-      assert File.exists?(File.join(app_path, 'db', 'schema_cache.dump'))
+      assert File.exist?(File.join(app_path, 'db', 'schema_cache.dump'))
     end
 
     def test_rake_clear_schema_cache
       Dir.chdir(app_path) do
         `bundle exec rake db:schema:cache:dump db:schema:cache:clear`
       end
-      assert !File.exists?(File.join(app_path, 'db', 'schema_cache.dump'))
+      assert !File.exist?(File.join(app_path, 'db', 'schema_cache.dump'))
     end
 
     def test_copy_templates
       Dir.chdir(app_path) do
         `bundle exec rake rails:templates:copy`
         %w(controller mailer scaffold).each do |dir|
-          assert File.exists?(File.join(app_path, 'lib', 'templates', 'erb', dir))
+          assert File.exist?(File.join(app_path, 'lib', 'templates', 'erb', dir))
         end
         %w(controller helper scaffold_controller assets).each do |dir|
-          assert File.exists?(File.join(app_path, 'lib', 'templates', 'rails', dir))
+          assert File.exist?(File.join(app_path, 'lib', 'templates', 'rails', dir))
         end
       end
+    end
+
+    def test_template_load_initializers
+      app_file "config/initializers/dummy.rb", "puts 'Hello, World!'"
+      app_file "template.rb", ""
+
+      output = Dir.chdir(app_path) do
+        `bundle exec rake rails:template LOCATION=template.rb`
+      end
+
+      assert_match(/Hello, World!/, output)
     end
   end
 end

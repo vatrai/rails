@@ -98,6 +98,19 @@ class DeprecationTest < ActiveSupport::TestCase
     assert_match(/foo=nil/, @b)
   end
 
+  def test_raise_behaviour
+    ActiveSupport::Deprecation.behavior = :raise
+
+    message   = 'Revise this deprecated stuff now!'
+    callstack = %w(foo bar baz)
+
+    e = assert_raise ActiveSupport::DeprecationException do
+      ActiveSupport::Deprecation.behavior.first.call(message, callstack)
+    end
+    assert_equal message, e.message
+    assert_equal callstack, e.backtrace
+  end
+
   def test_default_stderr_behavior
     ActiveSupport::Deprecation.behavior = :stderr
     behavior = ActiveSupport::Deprecation.behavior.first
@@ -158,7 +171,7 @@ class DeprecationTest < ActiveSupport::TestCase
       ActiveSupport::Deprecation.warn 'abc'
       ActiveSupport::Deprecation.warn 'def'
     end
-  rescue MiniTest::Assertion
+  rescue Minitest::Assertion
     flunk 'assert_deprecated should match any warning in block, not just the last one'
   end
 
@@ -341,5 +354,22 @@ class DeprecationTest < ActiveSupport::TestCase
         @messages ||= []
       end
       deprecator
+    end
+
+    def capture(stream)
+      stream = stream.to_s
+      captured_stream = Tempfile.new(stream)
+      stream_io = eval("$#{stream}")
+      origin_stream = stream_io.dup
+      stream_io.reopen(captured_stream)
+
+      yield
+
+      stream_io.rewind
+      return captured_stream.read
+    ensure
+      captured_stream.close
+      captured_stream.unlink
+      stream_io.reopen(origin_stream)
     end
 end

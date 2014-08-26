@@ -70,7 +70,6 @@ class ScaffoldGeneratorTest < Rails::Generators::TestCase
 
     # Helpers
     assert_file "app/helpers/product_lines_helper.rb"
-    assert_file "test/helpers/product_lines_helper_test.rb"
 
     # Assets
     assert_file "app/assets/stylesheets/scaffold.css"
@@ -114,7 +113,6 @@ class ScaffoldGeneratorTest < Rails::Generators::TestCase
 
     # Helpers
     assert_no_file "app/helpers/product_lines_helper.rb"
-    assert_no_file "test/helpers/product_lines_helper_test.rb"
 
     # Assets
     assert_file "app/assets/stylesheets/scaffold.css", /:visited/
@@ -182,7 +180,6 @@ class ScaffoldGeneratorTest < Rails::Generators::TestCase
 
     # Helpers
     assert_file "app/helpers/admin/roles_helper.rb"
-    assert_file "test/helpers/admin/roles_helper_test.rb"
 
     # Assets
     assert_file "app/assets/stylesheets/scaffold.css", /:visited/
@@ -216,7 +213,6 @@ class ScaffoldGeneratorTest < Rails::Generators::TestCase
 
     # Helpers
     assert_no_file "app/helpers/admin/roles_helper.rb"
-    assert_no_file "test/helpers/admin/roles_helper_test.rb"
 
     # Assets
     assert_file "app/assets/stylesheets/scaffold.css"
@@ -305,8 +301,8 @@ class ScaffoldGeneratorTest < Rails::Generators::TestCase
     end
 
     assert_file "app/views/accounts/_form.html.erb" do |content|
-      assert_match(/<%= f\.text_field :name %>/, content)
-      assert_match(/<%= f\.text_field :currency_id %>/, content)
+      assert_match(/^\W{4}<%= f\.text_field :name %>/, content)
+      assert_match(/^\W{4}<%= f\.text_field :currency_id %>/, content)
     end
   end
 

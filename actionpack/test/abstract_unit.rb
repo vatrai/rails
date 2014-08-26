@@ -15,6 +15,12 @@ silence_warnings do
   Encoding.default_external = "UTF-8"
 end
 
+require 'drb'
+require 'drb/unix'
+require 'tempfile'
+
+PROCESS_COUNT = (ENV['N'] || 4).to_i
+
 require 'active_support/testing/autorun'
 require 'abstract_controller'
 require 'action_controller'
@@ -43,6 +49,9 @@ Thread.abort_on_exception = true
 # Show backtraces for deprecated behavior for quicker cleanup.
 ActiveSupport::Deprecation.debug = true
 
+# Disable available locale checks to avoid warnings running the test suite.
+I18n.enforce_available_locales = false
+
 # Register danish language for testing
 I18n.backend.store_translations 'da', {}
 I18n.backend.store_translations 'pt-BR', {}
@@ -62,28 +71,6 @@ module RackTestUtils
     end
   end
   extend self
-end
-
-module RenderERBUtils
-  def view
-    @view ||= begin
-      path = ActionView::FileSystemResolver.new(FIXTURE_LOAD_PATH)
-      view_paths = ActionView::PathSet.new([path])
-      ActionView::Base.new(view_paths)
-    end
-  end
-
-  def render_erb(string)
-    @virtual_path = nil
-
-    template = ActionView::Template.new(
-      string.strip,
-      "test template",
-      ActionView::Template::Handlers::ERB,
-      {})
-
-    template.render(self, {}).strip
-  end
 end
 
 SharedTestRoutes = ActionDispatch::Routing::RouteSet.new
@@ -124,6 +111,9 @@ end
 module ActiveSupport
   class TestCase
     include ActionDispatch::DrawOnce
+    if ActiveSupport::Testing::Isolation.forking_env? && PROCESS_COUNT > 0
+      parallelize_me!
+    end
   end
 end
 
@@ -270,7 +260,6 @@ end
 
 module ActionController
   class Base
-    include ActionController::Testing
     # This stub emulates the Railtie including the URL helpers from a Rails application
     include SharedTestRoutes.url_helpers
     include SharedTestRoutes.mounted_helpers
@@ -290,15 +279,8 @@ module ActionController
   end
 end
 
-class ::ApplicationController < ActionController::Base
-end
 
-module ActionView
-  class TestCase
-    # Must repeat the setup because AV::TestCase is a duplication
-    # of AC::TestCase
-    include ActionDispatch::SharedRoutes
-  end
+class ::ApplicationController < ActionController::Base
 end
 
 class Workshop
@@ -332,22 +314,95 @@ end
 
 module ActionDispatch
   module RoutingVerbs
-    def get(uri_or_host, path = nil)
+    def send_request(uri_or_host, method, path)
       host = uri_or_host.host unless path
       path ||= uri_or_host.path
 
       params = {'PATH_INFO'      => path,
-                'REQUEST_METHOD' => 'GET',
+                'REQUEST_METHOD' => method,
                 'HTTP_HOST'      => host}
 
-      routes.call(params)[2].join
+      routes.call(params)
+    end
+
+    def request_path_params(path, options = {})
+      method = options[:method] || 'GET'
+      resp = send_request URI('http://localhost' + path), method.to_s.upcase, nil
+      status = resp.first
+      if status == 404
+        raise ActionController::RoutingError, "No route matches #{path.inspect}"
+      end
+      controller.request.path_parameters
+    end
+
+    def get(uri_or_host, path = nil)
+      send_request(uri_or_host, 'GET', path)[2].join
+    end
+
+    def post(uri_or_host, path = nil)
+      send_request(uri_or_host, 'POST', path)[2].join
+    end
+
+    def put(uri_or_host, path = nil)
+      send_request(uri_or_host, 'PUT', path)[2].join
+    end
+
+    def delete(uri_or_host, path = nil)
+      send_request(uri_or_host, 'DELETE', path)[2].join
+    end
+
+    def patch(uri_or_host, path = nil)
+      send_request(uri_or_host, 'PATCH', path)[2].join
     end
   end
 end
 
 module RoutingTestHelpers
-  def url_for(set, options, recall = nil)
-    set.send(:url_for, options.merge(:only_path => true, :_recall => recall))
+  def url_for(set, options)
+    route_name = options.delete :use_route
+    set.url_for options.merge(:only_path => true), route_name
+  end
+
+  def make_set(strict = true)
+    tc = self
+    TestSet.new ->(c) { tc.controller = c }, strict
+  end
+
+  class TestSet < ActionDispatch::Routing::RouteSet
+    attr_reader :strict
+
+    def initialize(block, strict = false)
+      @block = block
+      @strict = strict
+      super()
+    end
+
+    class Dispatcher < ActionDispatch::Routing::RouteSet::Dispatcher
+      def initialize(defaults, set, block)
+        super(defaults)
+        @block = block
+        @set = set
+      end
+
+      def controller(params, default_controller=true)
+        super(params, @set.strict)
+      end
+
+      def controller_reference(controller_param)
+        block = @block
+        set = @set
+        super if @set.strict
+        Class.new(ActionController::Base) {
+          include set.url_helpers
+          define_method(:process) { |name| block.call(self) }
+          def to_a; [200, {}, []]; end
+        }
+      end
+    end
+
+    def dispatcher defaults
+      TestSet::Dispatcher.new defaults, self, @block
+    end
   end
 end
 
@@ -360,7 +415,6 @@ class ThreadsController  < ResourcesController; end
 class MessagesController < ResourcesController; end
 class CommentsController < ResourcesController; end
 class ReviewsController < ResourcesController; end
-class AuthorsController < ResourcesController; end
 class LogosController < ResourcesController; end
 
 class AccountsController <  ResourcesController; end
@@ -371,12 +425,92 @@ class PreferencesController < ResourcesController; end
 
 module Backoffice
   class ProductsController < ResourcesController; end
-  class TagsController < ResourcesController; end
-  class ManufacturersController < ResourcesController; end
   class ImagesController < ResourcesController; end
 
   module Admin
     class ProductsController < ResourcesController; end
     class ImagesController < ResourcesController; end
   end
+end
+
+# Skips the current run on Rubinius using Minitest::Assertions#skip
+def rubinius_skip(message = '')
+  skip message if RUBY_ENGINE == 'rbx'
+end
+# Skips the current run on JRuby using Minitest::Assertions#skip
+def jruby_skip(message = '')
+  skip message if defined?(JRUBY_VERSION)
+end
+
+require 'mocha/setup' # FIXME: stop using mocha
+
+class ForkingExecutor
+  class Server
+    include DRb::DRbUndumped
+
+    def initialize
+      @queue = Queue.new
+    end
+
+    def record reporter, result
+      reporter.record result
+    end
+
+    def << o
+      o[2] = DRbObject.new(o[2]) if o
+      @queue << o
+    end
+    def pop; @queue.pop; end
+  end
+
+  def initialize size
+    @size  = size
+    @queue = Server.new
+    file   = File.join Dir.tmpdir, Dir::Tmpname.make_tmpname('tests', 'fd')
+    @url   = "drbunix://#{file}"
+    @pool  = nil
+    DRb.start_service @url, @queue
+  end
+
+  def << work; @queue << work; end
+
+  def shutdown
+    pool = @size.times.map {
+      fork {
+        DRb.stop_service
+        queue = DRbObject.new_with_uri @url
+        while job = queue.pop
+          klass    = job[0]
+          method   = job[1]
+          reporter = job[2]
+          result = Minitest.run_one_method klass, method
+          if result.error?
+            translate_exceptions result
+          end
+          queue.record reporter, result
+        end
+      }
+    }
+    @size.times { @queue << nil }
+    pool.each { |pid| Process.waitpid pid }
+  end
+
+  private
+  def translate_exceptions(result)
+    result.failures.map! { |e|
+      begin
+        Marshal.dump e
+        e
+      rescue TypeError
+        ex = Exception.new e.message
+        ex.set_backtrace e.backtrace
+        Minitest::UnexpectedError.new ex
+      end
+    }
+  end
+end
+
+if ActiveSupport::Testing::Isolation.forking_env? && PROCESS_COUNT > 0
+  # Use N processes (N defaults to 4)
+  Minitest.parallel_executor = ForkingExecutor.new(PROCESS_COUNT)
 end

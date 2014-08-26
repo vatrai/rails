@@ -26,7 +26,7 @@ module ActiveRecord
             queries << '1=0'
           else
             table       = Arel::Table.new(column, default_table.engine)
-            association = klass.reflect_on_association(column.to_sym)
+            association = klass._reflect_on_association(column.to_sym)
 
             value.each do |k, v|
               queries.concat expand(association && association.klass, table, k, v)
@@ -55,9 +55,9 @@ module ActiveRecord
       #
       # For polymorphic relationships, find the foreign key and type:
       # PriceEstimate.where(estimate_of: treasure)
-      if klass && value.class < Base && reflection = klass.reflect_on_association(column.to_sym)
-        if reflection.polymorphic?
-          queries << build(table[reflection.foreign_type], value.class.base_class)
+      if klass && reflection = klass._reflect_on_association(column.to_sym)
+        if reflection.polymorphic? && base_class = polymorphic_base_class_from_value(value)
+          queries << build(table[reflection.foreign_type], base_class)
         end
 
         column = reflection.foreign_key
@@ -65,6 +65,18 @@ module ActiveRecord
 
       queries << build(table[column], value)
       queries
+    end
+
+    def self.polymorphic_base_class_from_value(value)
+      case value
+      when Relation
+        value.klass.base_class
+      when Array
+        val = value.compact.first
+        val.class.base_class if val.is_a?(Base)
+      when Base
+        value.class.base_class
+      end
     end
 
     def self.references(attributes)
@@ -101,13 +113,14 @@ module ActiveRecord
     register_handler(Relation, RelationHandler.new)
     register_handler(Array, ArrayHandler.new)
 
-    private
-      def self.build(attribute, value)
-        handler_for(value).call(attribute, value)
-      end
+    def self.build(attribute, value)
+      handler_for(value).call(attribute, value)
+    end
+    private_class_method :build
 
-      def self.handler_for(object)
-        @handlers.detect { |klass, _| klass === object }.last
-      end
+    def self.handler_for(object)
+      @handlers.detect { |klass, _| klass === object }.last
+    end
+    private_class_method :handler_for
   end
 end

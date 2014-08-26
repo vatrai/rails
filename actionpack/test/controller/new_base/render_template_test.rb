@@ -9,12 +9,12 @@ module RenderTemplate
       "locals.html.erb"            => "The secret is <%= secret %>",
       "xml_template.xml.builder"   => "xml.html do\n  xml.p 'Hello'\nend",
       "with_raw.html.erb"          => "Hello <%=raw '<strong>this is raw</strong>' %>",
-      "with_implicit_raw.html.erb" => "Hello <%== '<strong>this is also raw</strong>' %> in a html template",
+      "with_implicit_raw.html.erb" => "Hello <%== '<strong>this is also raw</strong>' %> in an html template",
       "with_implicit_raw.text.erb" => "Hello <%== '<strong>this is also raw</strong>' %> in a text template",
       "test/with_json.html.erb"    => "<%= render :template => 'test/with_json', :formats => [:json] %>",
       "test/with_json.json.erb"    => "<%= render :template => 'test/final', :formats => [:json]  %>",
       "test/final.json.erb"        => "{ final: json }",
-      "test/with_error.html.erb"   => "<%= idontexist %>"
+      "test/with_error.html.erb"   => "<%= raise 'i do not exist' %>"
     )]
 
     def index
@@ -114,7 +114,7 @@ module RenderTemplate
 
       get :with_implicit_raw
 
-      assert_body "Hello <strong>this is also raw</strong> in a html template"
+      assert_body "Hello <strong>this is also raw</strong> in an html template"
       assert_status 200
 
       get :with_implicit_raw, format: 'text'
@@ -132,7 +132,7 @@ module RenderTemplate
     test "rendering a template with error properly excerts the code" do
       get :with_error
       assert_status 500
-      assert_match "undefined local variable or method `idontexist", response.body
+      assert_match "i do not exist", response.body
     end
   end
 

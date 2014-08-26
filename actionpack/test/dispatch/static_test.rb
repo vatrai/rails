@@ -1,6 +1,7 @@
 # encoding: utf-8
 require 'abstract_unit'
 require 'rbconfig'
+require 'zlib'
 
 module StaticTests
   def test_serves_dynamic_content
@@ -37,6 +38,8 @@ module StaticTests
   end
 
   def test_served_static_file_with_non_english_filename
+    jruby_skip "Stop skipping if following bug gets fixed: " \
+      "http://jira.codehaus.org/browse/JRUBY-7192"
     assert_html "means hello in Japanese\n", get("/foo/#{Rack::Utils.escape("こんにちは.html")}")
   end
 
@@ -104,6 +107,40 @@ module StaticTests
     end
   end
 
+  def test_serves_gzip_files_when_header_set
+    file_name = "/gzip/application-a71b3024f80aea3181c09774ca17e712.js"
+    response  = get(file_name, 'HTTP_ACCEPT_ENCODING' => 'gzip')
+    assert_gzip  file_name, response
+    assert_equal 'application/javascript', response.headers['Content-Type']
+    assert_equal 'Accept-Encoding',        response.headers["Vary"]
+    assert_equal 'gzip',                   response.headers["Content-Encoding"]
+
+    response  = get(file_name, 'HTTP_ACCEPT_ENCODING' => 'Gzip')
+    assert_gzip  file_name, response
+
+    response  = get(file_name, 'HTTP_ACCEPT_ENCODING' => 'GZIP')
+    assert_gzip  file_name, response
+
+    response  = get(file_name, 'HTTP_ACCEPT_ENCODING' => '')
+    assert_not_equal 'gzip', response.headers["Content-Encoding"]
+  end
+
+  def test_does_not_modify_path_info
+    file_name = "/gzip/application-a71b3024f80aea3181c09774ca17e712.js"
+    env = {'PATH_INFO' => file_name, 'HTTP_ACCEPT_ENCODING' => 'gzip'}
+    @app.call(env)
+    assert_equal file_name, env['PATH_INFO']
+  end
+
+  def test_serves_gzip_with_propper_content_type_fallback
+    file_name = "/gzip/foo.zoo"
+    response  = get(file_name, 'HTTP_ACCEPT_ENCODING' => 'gzip')
+    assert_gzip  file_name, response
+
+    default_response = get(file_name) # no gzip
+    assert_equal default_response.headers['Content-Type'], response.headers['Content-Type']
+  end
+
   # Windows doesn't allow \ / : * ? " < > | in filenames
   unless RbConfig::CONFIG['host_os'] =~ /mswin|mingw/
     def test_serves_static_file_with_colon
@@ -123,21 +160,33 @@ module StaticTests
 
   private
 
+    def assert_gzip(file_name, response)
+      expected = File.read("#{FIXTURE_LOAD_PATH}/#{public_path}" + file_name)
+      actual   = Zlib::GzipReader.new(StringIO.new(response.body)).read
+      assert_equal expected, actual
+    end
+
     def assert_html(body, response)
       assert_equal body, response.body
       assert_equal "text/html", response.headers["Content-Type"]
+      assert_nil response.headers["Vary"]
     end
 
-    def get(path)
-      Rack::MockRequest.new(@app).request("GET", path)
+    def get(path, headers = {})
+      Rack::MockRequest.new(@app).request("GET", path, headers)
     end
 
     def with_static_file(file)
-      path = "#{FIXTURE_LOAD_PATH}/public" + file
-      File.open(path, "wb+") { |f| f.write(file) }
+      path = "#{FIXTURE_LOAD_PATH}/#{public_path}" + file
+      begin
+        File.open(path, "wb+") { |f| f.write(file) }
+      rescue Errno::EPROTO
+        skip "Couldn't create a file #{path}"
+      end
+
       yield file
     ensure
-      File.delete(path)
+      File.delete(path) if File.exist? path
     end
 end
 
@@ -145,11 +194,24 @@ class StaticTest < ActiveSupport::TestCase
   DummyApp = lambda { |env|
     [200, {"Content-Type" => "text/plain"}, ["Hello, World!"]]
   }
-  App = ActionDispatch::Static.new(DummyApp, "#{FIXTURE_LOAD_PATH}/public", "public, max-age=60")
 
   def setup
-    @app = App
+    @app = ActionDispatch::Static.new(DummyApp, "#{FIXTURE_LOAD_PATH}/public", "public, max-age=60")
+  end
+
+  def public_path
+    "public"
   end
 
   include StaticTests
+end
+
+class StaticEncodingTest < StaticTest
+  def setup
+    @app = ActionDispatch::Static.new(DummyApp, "#{FIXTURE_LOAD_PATH}/公共", "public, max-age=60")
+  end
+
+  def public_path
+    "公共"
+  end
 end

@@ -37,9 +37,10 @@ For every single method defined as a core extension this guide has a note that s
 
 NOTE: Defined in `active_support/core_ext/object/blank.rb`.
 
-That means that this single call is enough:
+That means that you can require it like this:
 
 ```ruby
+require 'active_support'
 require 'active_support/core_ext/object/blank'
 ```
 
@@ -52,6 +53,7 @@ The next level is to simply load all extensions to `Object`. As a rule of thumb,
 Thus, to load all extensions to `Object` (including `blank?`):
 
 ```ruby
+require 'active_support'
 require 'active_support/core_ext/object'
 ```
 
@@ -60,6 +62,7 @@ require 'active_support/core_ext/object'
 You may prefer just to load all core extensions, there is a file for that:
 
 ```ruby
+require 'active_support'
 require 'active_support/core_ext'
 ```
 
@@ -154,9 +157,9 @@ Active Support provides `duplicable?` to programmatically query an object about 
 
 ```ruby
 "foo".duplicable? # => true
-"".duplicable?     # => true
+"".duplicable?    # => true
 0.0.duplicable?   # => false
-false.duplicable?  # => false
+false.duplicable? # => false
 ```
 
 By definition all objects are `duplicable?` except `nil`, `false`, `true`, symbols, numbers, class, and module objects.
@@ -176,14 +179,14 @@ duplicate = array.dup
 duplicate.push 'another-string'
 
 # the object was duplicated, so the element was added only to the duplicate
-array     #=> ['string']
-duplicate #=> ['string', 'another-string']
+array     # => ['string']
+duplicate # => ['string', 'another-string']
 
 duplicate.first.gsub!('string', 'foo')
 
 # first element was not duplicated, it will be changed in both arrays
-array     #=> ['foo']
-duplicate #=> ['foo', 'another-string']
+array     # => ['foo']
+duplicate # => ['foo', 'another-string']
 ```
 
 As you can see, after duplicating the `Array` instance, we got another object, therefore we can modify it and the original object will stay unchanged. This is not true for array's elements, however. Since `dup` does not make deep copy, the string inside the array is still the same object.
@@ -196,8 +199,8 @@ duplicate = array.deep_dup
 
 duplicate.first.gsub!('string', 'foo')
 
-array     #=> ['string']
-duplicate #=> ['foo']
+array     # => ['string']
+duplicate # => ['foo']
 ```
 
 If the object is not duplicable, `deep_dup` will just return it:
@@ -421,11 +424,9 @@ NOTE: Defined in `active_support/core_ext/object/with_options.rb`.
 
 ### JSON support
 
-Active Support provides a better implemention of `to_json` than the `json` gem ordinarily provides for Ruby objects. This is because some classes, like `Hash` and `OrderedHash` needs special handling in order to provide a proper JSON representation.
+Active Support provides a better implementation of `to_json` than the `json` gem ordinarily provides for Ruby objects. This is because some classes, like `Hash`, `OrderedHash` and `Process::Status` need special handling in order to provide a proper JSON representation.
 
-Active Support also provides an implementation of `as_json` for the `Process::Status` class.
-
-NOTE: Defined in `active_support/core_ext/object/to_json.rb`.
+NOTE: Defined in `active_support/core_ext/object/json.rb`.
 
 ### Instance Variables
 
@@ -571,12 +572,12 @@ NOTE: Defined in `active_support/core_ext/module/aliasing.rb`.
 
 #### `alias_attribute`
 
-Model attributes have a reader, a writer, and a predicate. You can alias a model attribute having the corresponding three methods defined for you in one shot. As in other aliasing methods, the new name is the first argument, and the old name is the second (my mnemonic is they go in the same order as if you did an assignment):
+Model attributes have a reader, a writer, and a predicate. You can alias a model attribute having the corresponding three methods defined for you in one shot. As in other aliasing methods, the new name is the first argument, and the old name is the second (one mnemonic is that they go in the same order as if you did an assignment):
 
 ```ruby
 class User < ActiveRecord::Base
-  # let me refer to the email column as "login",
-  # possibly meaningful for authentication code
+  # You can refer to the email column as "login".
+  # This can be meaningful for authentication code.
   alias_attribute :login, :email
 end
 ```
@@ -623,7 +624,7 @@ NOTE: Defined in `active_support/core_ext/module/attr_internal.rb`.
 
 #### Module Attributes
 
-The macros `mattr_reader`, `mattr_writer`, and `mattr_accessor` are analogous to the `cattr_*` macros defined for class. Check [Class Attributes](#class-attributes).
+The macros `mattr_reader`, `mattr_writer`, and `mattr_accessor` are the same as the `cattr_*` macros defined for class. In fact, the `cattr_*` macros are just aliases for the `mattr_*` macros. Check [Class Attributes](#class-attributes).
 
 For example, the dependencies mechanism uses them:
 
@@ -734,7 +735,7 @@ X.local_constants    # => [:X1, :X2, :Y]
 X::Y.local_constants # => [:Y1, :X1]
 ```
 
-The names are returned as symbols. (The deprecated method `local_constant_names` returns strings.)
+The names are returned as symbols.
 
 NOTE: Defined in `active_support/core_ext/module/introspection.rb`.
 
@@ -760,7 +761,7 @@ Arguments may be bare constant names:
 Math.qualified_const_get("E") # => 2.718281828459045
 ```
 
-These methods are analogous to their builtin counterparts. In particular,
+These methods are analogous to their built-in counterparts. In particular,
 `qualified_constant_defined?` accepts an optional second argument to be
 able to say whether you want the predicate to look in the ancestors.
 This flag is taken into account for each constant in the expression while
@@ -791,7 +792,7 @@ N.qualified_const_defined?("C::X")        # => true
 As the last example implies, the second argument defaults to true,
 as in `const_defined?`.
 
-For coherence with the builtin methods only relative paths are accepted.
+For coherence with the built-in methods only relative paths are accepted.
 Absolute qualified constant names like `::Math::PI` raise `NameError`.
 
 NOTE: Defined in `active_support/core_ext/module/qualified_const.rb`.
@@ -887,7 +888,7 @@ class User < ActiveRecord::Base
 end
 ```
 
-With that configuration you get a user's name via his profile, `user.profile.name`, but it could be handy to still be able to access such attribute directly:
+With that configuration you get a user's name via their profile, `user.profile.name`, but it could be handy to still be able to access such attribute directly:
 
 ```ruby
 class User < ActiveRecord::Base
@@ -963,20 +964,7 @@ NOTE: Defined in `active_support/core_ext/module/delegation.rb`
 
 There are cases where you need to define a method with `define_method`, but don't know whether a method with that name already exists. If it does, a warning is issued if they are enabled. No big deal, but not clean either.
 
-The method `redefine_method` prevents such a potential warning, removing the existing method before if needed. Rails uses it in a few places, for instance when it generates an association's API:
-
-```ruby
-redefine_method("#{reflection.name}=") do |new_value|
-  association = association_instance_get(reflection.name)
-
-  if association.nil? || association.target != new_value
-    association = association_proxy_class.new(self, reflection)
-  end
-
-  association.replace(new_value)
-  association_instance_set(reflection.name, new_value.nil? ? nil : association)
-end
-```
+The method `redefine_method` prevents such a potential warning, removing the existing method before if needed.
 
 NOTE: Defined in `active_support/core_ext/module/remove_method.rb`
 
@@ -1092,6 +1080,15 @@ end
 
 we can access `field_error_proc` in views.
 
+Also, you can pass a block to `cattr_*` to set up the attribute with a default value:
+
+```ruby
+class MysqlAdapter < AbstractAdapter
+  # Generates class methods to access @@emulate_booleans with default value of true.
+  cattr_accessor(:emulate_booleans) { true }
+end
+```
+
 The generation of the reader instance method can be prevented by setting `:instance_reader` to `false` and the generation of the writer instance method can be prevented by setting `:instance_writer` to `false`. Generation of both methods can be prevented by setting `:instance_accessor` to `false`. In all cases, the value must be exactly `false` and not any false value.
 
 ```ruby
@@ -1109,7 +1106,7 @@ end
 
 A model may find it useful to set `:instance_accessor` to `false` as a way to prevent mass-assignment from setting the attribute.
 
-NOTE: Defined in `active_support/core_ext/class/attribute_accessors.rb`.
+NOTE: Defined in `active_support/core_ext/module/attribute_accessors.rb`.
 
 ### Subclasses & Descendants
 
@@ -1168,9 +1165,9 @@ Inserting data into HTML templates needs extra care. For example, you can't just
 
 #### Safe Strings
 
-Active Support has the concept of <i>(html) safe</i> strings. A safe string is one that is marked as being insertable into HTML as is. It is trusted, no matter whether it has been escaped or not.
+Active Support has the concept of _(html) safe_ strings. A safe string is one that is marked as being insertable into HTML as is. It is trusted, no matter whether it has been escaped or not.
 
-Strings are considered to be <i>unsafe</i> by default:
+Strings are considered to be _unsafe_ by default:
 
 ```ruby
 "".html_safe? # => false
@@ -1248,6 +1245,18 @@ Calling `to_s` on a safe string returns a safe string, but coercion with `to_str
 #### Copying
 
 Calling `dup` or `clone` on safe strings yields safe strings.
+
+### `remove`
+
+The method `remove` will remove all occurrences of the pattern:
+
+```ruby
+"Hello World".remove(/Hello /) => "World"
+```
+
+There's also the destructive version `String#remove!`.
+
+NOTE: Defined in `active_support/core_ext/string/filters.rb`.
 
 ### `squish`
 
@@ -1380,6 +1389,8 @@ The third argument, `indent_empty_lines`, is a flag that says whether empty line
 ```
 
 The `indent!` method performs indentation in-place.
+
+NOTE: Defined in `active_support/core_ext/string/indent.rb`.
 
 ### Access
 
@@ -1532,7 +1543,7 @@ ActiveSupport::Inflector.inflections do |inflect|
   inflect.acronym 'SSL'
 end
 
-"SSLError".underscore.camelize #=> "SSLError"
+"SSLError".underscore.camelize # => "SSLError"
 ```
 
 `camelize` is aliased to `camelcase`.
@@ -1620,6 +1631,9 @@ Given a string with a qualified constant name, `demodulize` returns the very con
 "Product".demodulize                        # => "Product"
 "Backoffice::UsersController".demodulize    # => "UsersController"
 "Admin::Hotel::ReservationUtils".demodulize # => "ReservationUtils"
+"::Inflections".demodulize                  # => "Inflections"
+"".demodulize                               # => ""
+
 ```
 
 Active Record for example uses this method to compute the name of a counter cache column:
@@ -1754,15 +1768,36 @@ NOTE: Defined in `active_support/core_ext/string/inflections.rb`.
 
 #### `humanize`
 
-The method `humanize` gives you a sensible name for display out of an attribute name. To do so it replaces underscores with spaces, removes any "_id" suffix, and capitalizes the first word:
+The method `humanize` tweaks an attribute name for display to end users.
+
+Specifically performs these transformations:
+
+  * Applies human inflection rules to the argument.
+  * Deletes leading underscores, if any.
+  * Removes a "_id" suffix if present.
+  * Replaces underscores with spaces, if any.
+  * Downcases all words except acronyms.
+  * Capitalizes the first word.
+
+The capitalization of the first word can be turned off by setting the
++:capitalize+ option to false (default is true).
 
 ```ruby
-"name".humanize           # => "Name"
-"author_id".humanize      # => "Author"
-"comments_count".humanize # => "Comments count"
+"name".humanize                         # => "Name"
+"author_id".humanize                    # => "Author"
+"author_id".humanize(capitalize: false) # => "author"
+"comments_count".humanize               # => "Comments count"
+"_id".humanize                          # => "Id"
 ```
 
-The helper method `full_messages` uses `humanize` as a fallback to include attribute names:
+If "SSL" was defined to be an acronym:
+
+```ruby
+'ssl_error'.humanize # => "SSL error"
+```
+
+The helper method `full_messages` uses `humanize` as a fallback to include
+attribute names:
 
 ```ruby
 def full_messages
@@ -2046,7 +2081,7 @@ BigDecimal.new(5.00, 6).to_s  # => "5.0"
 
 ### `to_formatted_s`
 
-The method `to_formatted_s` provides a default specifier of "F".  This means that a simple call to `to_formatted_s` or `to_s` will result in floating point representation instead of engineering notation:
+Te method `to_formatted_s` provides a default specifier of "F".  This means that a simple call to `to_formatted_s` or `to_s` will result in floating point representation instead of engineering notation:
 
 ```ruby
 BigDecimal.new(5.00, 6).to_formatted_s  # => "5.0"
@@ -2256,8 +2291,6 @@ The defaults for these options can be localized, their keys are:
 | `:two_words_connector` | `support.array.two_words_connector` |
 | `:words_connector`     | `support.array.words_connector`     |
 | `:last_word_connector` | `support.array.last_word_connector` |
-
-Options `:connector` and `:skip_last_comma` are deprecated.
 
 NOTE: Defined in `active_support/core_ext/array/conversions.rb`.
 
@@ -2687,26 +2720,29 @@ NOTE: Defined in `active_support/core_ext/hash/except.rb`.
 The method `transform_keys` accepts a block and returns a hash that has applied the block operations to each of the keys in the receiver:
 
 ```ruby
-{nil => nil, 1 => 1, a: :a}.transform_keys{ |key| key.to_s.upcase }
+{nil => nil, 1 => 1, a: :a}.transform_keys { |key| key.to_s.upcase }
 # => {"" => nil, "A" => :a, "1" => 1}
 ```
 
-The result in case of collision is undefined:
+In case of key collision, one of the values will be chosen. The chosen value may not always be the same given the same hash:
 
 ```ruby
-{"a" => 1, a: 2}.transform_keys{ |key| key.to_s.upcase }
-# => {"A" => 2}, in my test, can't rely on this result though
+{"a" => 1, a: 2}.transform_keys { |key| key.to_s.upcase }
+# The result could either be
+# => {"A"=>2}
+# or
+# => {"A"=>1}
 ```
 
 This method may be useful for example to build specialized conversions. For instance `stringify_keys` and `symbolize_keys` use `transform_keys` to perform their key conversions:
 
 ```ruby
 def stringify_keys
-  transform_keys{ |key| key.to_s }
+  transform_keys { |key| key.to_s }
 end
 ...
 def symbolize_keys
-  transform_keys{ |key| key.to_sym rescue key }
+  transform_keys { |key| key.to_sym rescue key }
 end
 ```
 
@@ -2715,7 +2751,7 @@ There's also the bang variant `transform_keys!` that applies the block operation
 Besides that, one can use `deep_transform_keys` and `deep_transform_keys!` to perform the block operation on all the keys in the given hash and all the hashes nested into it. An example of the result is:
 
 ```ruby
-{nil => nil, 1 => 1, nested: {a: 3, 5 => 5}}.deep_transform_keys{ |key| key.to_s.upcase }
+{nil => nil, 1 => 1, nested: {a: 3, 5 => 5}}.deep_transform_keys { |key| key.to_s.upcase }
 # => {""=>nil, "1"=>1, "NESTED"=>{"A"=>3, "5"=>5}}
 ```
 
@@ -2730,11 +2766,14 @@ The method `stringify_keys` returns a hash that has a stringified version of the
 # => {"" => nil, "a" => :a, "1" => 1}
 ```
 
-The result in case of collision is undefined:
+In case of key collision, one of the values will be chosen. The chosen value may not always be the same given the same hash:
 
 ```ruby
 {"a" => 1, a: 2}.stringify_keys
-# => {"a" => 2}, in my test, can't rely on this result though
+# The result could either be
+# => {"a"=>2}
+# or
+# => {"a"=>1}
 ```
 
 This method may be useful for example to easily accept both symbols and strings as options. For instance `ActionView::Helpers::FormHelper` defines:
@@ -2771,11 +2810,14 @@ The method `symbolize_keys` returns a hash that has a symbolized version of the 
 
 WARNING. Note in the previous example only one key was symbolized.
 
-The result in case of collision is undefined:
+In case of key collision, one of the values will be chosen. The chosen value may not always be the same given the same hash:
 
 ```ruby
 {"a" => 1, a: 2}.symbolize_keys
-# => {:a=>2}, in my test, can't rely on this result though
+# The result could either be
+# => {:a=>2}
+# or
+# => {:a=>1}
 ```
 
 This method may be useful for example to easily accept both symbols and strings as options. For instance `ActionController::UrlRewriter` defines
@@ -2880,6 +2922,16 @@ The method `with_indifferent_access` returns an `ActiveSupport::HashWithIndiffer
 ```
 
 NOTE: Defined in `active_support/core_ext/hash/indifferent_access.rb`.
+
+### Compacting
+
+The methods `compact` and `compact!` return a Hash without items with `nil` value.
+
+```ruby
+{a: 1, b: 2, c: nil}.compact # => {a: 1, b: 2}
+```
+
+NOTE: Defined in `active_support/core_ext/hash/compact.rb`.
 
 Extensions to `Regexp`
 ----------------------
@@ -3620,9 +3672,9 @@ t.advance(seconds: 1)
 
 #### `Time.current`
 
-Active Support defines `Time.current` to be today in the current time zone. That's like `Time.now`, except that it honors the user time zone, if defined. It also defines `Time.yesterday` and `Time.tomorrow`, and the instance predicates `past?`, `today?`, and `future?`, all of them relative to `Time.current`.
+Active Support defines `Time.current` to be today in the current time zone. That's like `Time.now`, except that it honors the user time zone, if defined. It also defines the instance predicates `past?`, `today?`, and `future?`, all of them relative to `Time.current`.
 
-When making Time comparisons using methods which honor the user time zone, make sure to use `Time.current` and not `Time.now`. There are cases where the user time zone might be in the future compared to the system time zone, which `Time.today` uses by default. This means `Time.now` may equal `Time.yesterday`.
+When making Time comparisons using methods which honor the user time zone, make sure to use `Time.current` instead of `Time.now`. There are cases where the user time zone might be in the future compared to the system time zone, which `Time.now` uses by default. This means `Time.now.to_date` may equal `Date.yesterday`.
 
 #### `all_day`, `all_week`, `all_month`, `all_quarter` and `all_year`
 
@@ -3786,7 +3838,7 @@ The name may be given as a symbol or string. A symbol is tested against the bare
 
 TIP: A symbol can represent a fully-qualified constant name as in `:"ActiveRecord::Base"`, so the behavior for symbols is defined for convenience, not because it has to be that way technically.
 
-For example, when an action of `PostsController` is called Rails tries optimistically to use `PostsHelper`. It is OK that the helper module does not exist, so if an exception for that constant name is raised it should be silenced. But it could be the case that `posts_helper.rb` raises a `NameError` due to an actual unknown constant. That should be reraised. The method `missing_name?` provides a way to distinguish both cases:
+For example, when an action of `ArticlesController` is called Rails tries optimistically to use `ArticlesHelper`. It is OK that the helper module does not exist, so if an exception for that constant name is raised it should be silenced. But it could be the case that `articles_helper.rb` raises a `NameError` due to an actual unknown constant. That should be reraised. The method `missing_name?` provides a way to distinguish both cases:
 
 ```ruby
 def default_helper_module!
@@ -3800,7 +3852,7 @@ rescue NameError => e
 end
 ```
 
-NOTE: Defined in `actionpack/lib/abstract_controller/helpers.rb`.
+NOTE: Defined in `active_support/core_ext/name_error.rb`.
 
 Extensions to `LoadError`
 -------------------------
@@ -3809,7 +3861,7 @@ Active Support adds `is_missing?` to `LoadError`, and also assigns that class to
 
 Given a path name `is_missing?` tests whether the exception was raised due to that particular file (except perhaps for the ".rb" extension).
 
-For example, when an action of `PostsController` is called Rails tries to load `posts_helper.rb`, but that file may not exist. That's fine, the helper module is not mandatory so Rails silences a load error. But it could be the case that the helper module does exist and in turn requires another library that is missing. In that case Rails must reraise the exception. The method `is_missing?` provides a way to distinguish both cases:
+For example, when an action of `ArticlesController` is called Rails tries to load `articles_helper.rb`, but that file may not exist. That's fine, the helper module is not mandatory so Rails silences a load error. But it could be the case that the helper module does exist and in turn requires another library that is missing. In that case Rails must reraise the exception. The method `is_missing?` provides a way to distinguish both cases:
 
 ```ruby
 def default_helper_module!
@@ -3823,4 +3875,4 @@ rescue NameError => e
 end
 ```
 
-NOTE: Defined in `actionpack/lib/abstract_controller/helpers.rb`.
+NOTE: Defined in `active_support/core_ext/load_error.rb`.

@@ -20,11 +20,12 @@ Gem::Specification.new do |s|
   s.requirements << 'none'
 
   s.add_dependency 'activesupport', version
-  s.add_dependency 'actionview',    version
 
-  s.add_dependency 'rack',          '~> 1.5.2'
-  s.add_dependency 'rack-test',     '~> 0.6.2'
+  s.add_dependency 'rack',      '~> 1.6.0.beta'
+  s.add_dependency 'rack-test', '~> 0.6.2'
+  s.add_dependency 'rails-deprecated_sanitizer', '~> 1.0', '>= 1.0.2'
+  s.add_dependency 'rails-dom-testing', '~> 1.0', '>= 1.0.2'
+  s.add_dependency 'actionview', version
 
   s.add_development_dependency 'activemodel', version
-  s.add_development_dependency 'tzinfo',      '~> 0.3.37'
 end

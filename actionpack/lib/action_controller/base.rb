@@ -1,3 +1,4 @@
+require 'action_view'
 require "action_controller/log_subscriber"
 require "action_controller/metal/params_wrapper"
 
@@ -44,7 +45,7 @@ module ActionController
   #
   #   def server_ip
   #     location = request.env["SERVER_ADDR"]
-  #     render text: "This server hosted at #{location}"
+  #     render plain: "This server hosted at #{location}"
   #   end
   #
   # == Parameters
@@ -85,7 +86,7 @@ module ActionController
   # or you can remove the entire session with +reset_session+.
   #
   # Sessions are stored by default in a browser cookie that's cryptographically signed, but unencrypted.
-  # This prevents the user from tampering with the session but also allows him to see its contents.
+  # This prevents the user from tampering with the session but also allows them to see its contents.
   #
   # Do not put secret information in cookie-based sessions!
   #
@@ -200,7 +201,7 @@ module ActionController
     end
 
     MODULES = [
-      AbstractController::Layouts,
+      AbstractController::Rendering,
       AbstractController::Translation,
       AbstractController::AssetPaths,
 
@@ -208,9 +209,11 @@ module ActionController
       HideActions,
       UrlFor,
       Redirecting,
+      ActionView::Layouts,
       Rendering,
       Renderers::All,
       ConditionalGet,
+      EtagWithTemplateDigest,
       RackDelegation,
       Caching,
       MimeResponds,
@@ -248,10 +251,17 @@ module ActionController
     end
 
     # Define some internal variables that should not be propagated to the view.
-    self.protected_instance_variables = [
+    PROTECTED_IVARS = AbstractController::Rendering::DEFAULT_PROTECTED_INSTANCE_VARIABLES + [
       :@_status, :@_headers, :@_params, :@_env, :@_response, :@_request,
-      :@_view_runtime, :@_stream, :@_url_options, :@_action_has_layout
-    ]
+      :@_view_runtime, :@_stream, :@_url_options, :@_action_has_layout ]
+
+    def _protected_ivars # :nodoc:
+      PROTECTED_IVARS
+    end
+
+    def self.protected_instance_variables
+      PROTECTED_IVARS
+    end
 
     ActiveSupport.run_load_hooks(:action_controller, self)
   end

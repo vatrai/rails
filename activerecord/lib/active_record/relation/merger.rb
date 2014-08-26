@@ -30,6 +30,8 @@ module ActiveRecord
             else
               other.joins!(*v)
             end
+          elsif k == :select
+            other._select!(v)
           else
             other.send("#{k}!", v)
           end
@@ -58,7 +60,17 @@ module ActiveRecord
       def merge
         normal_values.each do |name|
           value = values[name]
-          relation.send("#{name}!", *value) unless value.blank?
+          # The unless clause is here mostly for performance reasons (since the `send` call might be moderately
+          # expensive), most of the time the value is going to be `nil` or `.blank?`, the only catch is that
+          # `false.blank?` returns `true`, so there needs to be an extra check so that explicit `false` values
+          # don't fall through the cracks.
+          unless value.nil? || (value.blank? && false != value)
+            if name == :select
+              relation._select!(*value)
+            else
+              relation.send("#{name}!", *value)
+            end
+          end
         end
 
         merge_multi_values
@@ -90,7 +102,7 @@ module ActiveRecord
                                                                            [])
           relation.joins! rest
 
-          @relation = join_dependency.join_relation(relation)
+          @relation = relation.joins join_dependency
         end
       end
 
@@ -107,11 +119,11 @@ module ActiveRecord
         bind_values  = filter_binds(lhs_binds, removed) + rhs_binds
 
         conn = relation.klass.connection
-        bviter = bind_values.each.with_index
+        bv_index = 0
         where_values.map! do |node|
           if Arel::Nodes::Equality === node && Arel::Nodes::BindParam === node.right
-            (column, _), i = bviter.next
-            substitute = conn.substitute_at column, i
+            substitute = conn.substitute_at(bind_values[bv_index].first, bv_index)
+            bv_index += 1
             Arel::Nodes::Equality.new(node.left, substitute)
           else
             node
@@ -135,7 +147,6 @@ module ActiveRecord
       def merge_single_values
         relation.from_value          = values[:from] unless relation.from_value
         relation.lock_value          = values[:lock] unless relation.lock_value
-        relation.reverse_order_value = values[:reverse_order]
 
         unless values[:create_with].blank?
           relation.create_with_value = (relation.create_with_value || {}).merge(values[:create_with])
@@ -145,7 +156,7 @@ module ActiveRecord
       def filter_binds(lhs_binds, removed_wheres)
         return lhs_binds if removed_wheres.empty?
 
-        set = Set.new removed_wheres.map { |x| x.left.name }
+        set = Set.new removed_wheres.map { |x| x.left.name.to_s }
         lhs_binds.dup.delete_if { |col,_| set.include? col.name }
       end
 

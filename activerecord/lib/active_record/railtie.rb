@@ -31,21 +31,16 @@ module ActiveRecord
 
 
     config.active_record.use_schema_cache_dump = true
+    config.active_record.maintain_test_schema = true
 
     config.eager_load_namespaces << ActiveRecord
 
     rake_tasks do
       require "active_record/base"
 
-      ActiveRecord::Tasks::DatabaseTasks.seed_loader = Rails.application
-      ActiveRecord::Tasks::DatabaseTasks.env = Rails.env
-
       namespace :db do
         task :load_config do
-          ActiveRecord::Tasks::DatabaseTasks.db_dir = Rails.application.config.paths["db"].first
           ActiveRecord::Tasks::DatabaseTasks.database_configuration = Rails.application.config.database_configuration
-          ActiveRecord::Tasks::DatabaseTasks.migrations_paths = Rails.application.paths['db/migrate'].to_a
-          ActiveRecord::Tasks::DatabaseTasks.fixtures_path = File.join Rails.root, 'test', 'fixtures'
 
           if defined?(ENGINE_PATH) && engine = Rails::Engine.find(ENGINE_PATH)
             if engine.paths['db/migrate'].existent
@@ -121,8 +116,22 @@ module ActiveRecord
     # and then establishes the connection.
     initializer "active_record.initialize_database" do |app|
       ActiveSupport.on_load(:active_record) do
-        self.configurations = app.config.database_configuration || {}
-        establish_connection
+        self.configurations = Rails.application.config.database_configuration
+
+        begin
+          establish_connection
+        rescue ActiveRecord::NoDatabaseError
+          warn <<-end_warning
+Oops - You have a database configured, but it doesn't exist yet!
+
+Here's how to get started:
+
+  1. Configure your database in config/database.yml.
+  2. Run `bin/rake db:create` to create the database.
+  3. Run `bin/rake db:setup` to load your database schema.
+end_warning
+          raise
+        end
       end
     end
 

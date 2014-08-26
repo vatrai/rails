@@ -1,6 +1,7 @@
 require 'abstract_unit'
 require 'active_support/time'
 require 'core_ext/date_and_time_behavior'
+require 'time_zone_test_helpers'
 
 class DateExtCalculationsTest < ActiveSupport::TestCase
   def date_time_init(year,month,day,*args)
@@ -8,6 +9,7 @@ class DateExtCalculationsTest < ActiveSupport::TestCase
   end
 
   include DateAndTimeBehavior
+  include TimeZoneTestHelpers
 
   def test_yesterday_in_calendar_reform
     assert_equal Date.new(1582,10,4), Date.new(1582,10,15).yesterday
@@ -276,6 +278,23 @@ class DateExtCalculationsTest < ActiveSupport::TestCase
     end
   end
 
+  def test_all_week
+    assert_equal Date.new(2011,6,6)..Date.new(2011,6,12), Date.new(2011,6,7).all_week
+    assert_equal Date.new(2011,6,5)..Date.new(2011,6,11), Date.new(2011,6,7).all_week(:sunday)
+  end
+
+  def test_all_month
+    assert_equal Date.new(2011,6,1)..Date.new(2011,6,30), Date.new(2011,6,7).all_month
+  end
+
+  def test_all_quarter
+    assert_equal Date.new(2011,4,1)..Date.new(2011,6,30), Date.new(2011,6,7).all_quarter
+  end
+
+  def test_all_year
+    assert_equal Date.new(2011,1,1)..Date.new(2011,12,31), Date.new(2011,6,7).all_year
+  end
+
   def test_xmlschema
     with_env_tz 'US/Eastern' do
       assert_match(/^1980-02-28T00:00:00-05:?00$/, Date.new(1980, 2, 28).xmlschema)
@@ -332,22 +351,6 @@ class DateExtCalculationsTest < ActiveSupport::TestCase
     Date.new(2005,2,28).advance(options)
     assert_equal({ :years => 3, :months => 11, :days => 2 }, options)
   end
-
-  protected
-    def with_env_tz(new_tz = 'US/Eastern')
-      old_tz, ENV['TZ'] = ENV['TZ'], new_tz
-      yield
-    ensure
-      old_tz ? ENV['TZ'] = old_tz : ENV.delete('TZ')
-    end
-
-    def with_tz_default(tz = nil)
-      old_tz = Time.zone
-      Time.zone = tz
-      yield
-    ensure
-      Time.zone = old_tz
-    end
 end
 
 class DateExtBehaviorTest < ActiveSupport::TestCase

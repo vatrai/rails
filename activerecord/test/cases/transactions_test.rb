@@ -5,6 +5,7 @@ require 'models/developer'
 require 'models/book'
 require 'models/author'
 require 'models/post'
+require 'models/movie'
 
 class TransactionTest < ActiveRecord::TestCase
   self.use_transactional_fixtures = false
@@ -12,6 +13,11 @@ class TransactionTest < ActiveRecord::TestCase
 
   def setup
     @first, @second = Topic.find(1, 2).sort_by { |t| t.id }
+  end
+
+  def test_persisted_in_a_model_with_custom_primary_key_after_failed_save
+    movie = Movie.create
+    assert !movie.persisted?
   end
 
   def test_raise_after_destroy
@@ -74,6 +80,30 @@ class TransactionTest < ActiveRecord::TestCase
     end
   end
 
+  def test_number_of_transactions_in_commit
+    num = nil
+
+    Topic.connection.class_eval do
+      alias :real_commit_db_transaction :commit_db_transaction
+      define_method(:commit_db_transaction) do
+        num = transaction_manager.open_transactions
+        real_commit_db_transaction
+      end
+    end
+
+    Topic.transaction do
+      @first.approved  = true
+      @first.save!
+    end
+
+    assert_equal 0, num
+  ensure
+    Topic.connection.class_eval do
+      remove_method :commit_db_transaction
+      alias :commit_db_transaction :real_commit_db_transaction rescue nil
+    end
+  end
+
   def test_successful_with_instance_method
     @first.transaction do
       @first.approved  = true
@@ -115,6 +145,19 @@ class TransactionTest < ActiveRecord::TestCase
     e = assert_raises(RuntimeError) { @first.save }
     assert_equal "Make the transaction rollback", e.message
     assert !Topic.find(1).approved?
+  end
+
+  def test_rolling_back_in_a_callback_rollbacks_before_save
+    def @first.before_save_for_transaction
+      raise ActiveRecord::Rollback
+    end
+    assert !@first.approved
+
+    Topic.transaction do
+      @first.approved  = true
+      @first.save!
+    end
+    assert !Topic.find(@first.id).approved?, "Should not commit the approved flag"
   end
 
   def test_raising_exception_in_nested_transaction_restore_state_in_save
@@ -375,6 +418,56 @@ class TransactionTest < ActiveRecord::TestCase
     assert_equal "Three", @three
   end if Topic.connection.supports_savepoints?
 
+  def test_using_named_savepoints
+    Topic.transaction do
+      @first.approved  = true
+      @first.save!
+      Topic.connection.create_savepoint("first")
+
+      @first.approved  = false
+      @first.save!
+      Topic.connection.rollback_to_savepoint("first")
+      assert @first.reload.approved?
+
+      @first.approved  = false
+      @first.save!
+      Topic.connection.release_savepoint("first")
+      assert_not @first.reload.approved?
+    end
+  end if Topic.connection.supports_savepoints?
+
+  def test_releasing_named_savepoints
+    Topic.transaction do
+      Topic.connection.create_savepoint("another")
+      Topic.connection.release_savepoint("another")
+
+      # The savepoint is now gone and we can't remove it again.
+      assert_raises(ActiveRecord::StatementInvalid) do
+        Topic.connection.release_savepoint("another")
+      end
+    end
+  end
+
+  def test_savepoints_name
+    Topic.transaction do
+      assert_nil Topic.connection.current_savepoint_name
+      assert_nil Topic.connection.current_transaction.savepoint_name
+
+      Topic.transaction(requires_new: true) do
+        assert_equal "active_record_1", Topic.connection.current_savepoint_name
+        assert_equal "active_record_1", Topic.connection.current_transaction.savepoint_name
+
+        Topic.transaction(requires_new: true) do
+          assert_equal "active_record_2", Topic.connection.current_savepoint_name
+          assert_equal "active_record_2", Topic.connection.current_transaction.savepoint_name
+        end
+
+        assert_equal "active_record_1", Topic.connection.current_savepoint_name
+        assert_equal "active_record_1", Topic.connection.current_transaction.savepoint_name
+      end
+    end
+  end
+
   def test_rollback_when_commit_raises
     Topic.connection.expects(:begin_db_transaction)
     Topic.connection.expects(:commit_db_transaction).raises('OH NOES')
@@ -391,24 +484,35 @@ class TransactionTest < ActiveRecord::TestCase
     topic = Topic.new(:title => 'test')
     topic.freeze
     e = assert_raise(RuntimeError) { topic.save }
-    assert_equal "can't modify frozen Hash", e.message
+    assert_match(/frozen/i, e.message) # Not good enough, but we can't do much
+                                       # about it since there is no specific error
+                                       # for frozen objects.
     assert !topic.persisted?, 'not persisted'
     assert_nil topic.id
     assert topic.frozen?, 'not frozen'
   end
 
   def test_restore_active_record_state_for_all_records_in_a_transaction
+    topic_without_callbacks = Class.new(ActiveRecord::Base) do
+      self.table_name = 'topics'
+    end
+
     topic_1 = Topic.new(:title => 'test_1')
     topic_2 = Topic.new(:title => 'test_2')
+    topic_3 = topic_without_callbacks.new(:title => 'test_3')
+
     Topic.transaction do
       assert topic_1.save
       assert topic_2.save
+      assert topic_3.save
       @first.save
       @second.destroy
       assert topic_1.persisted?, 'persisted'
       assert_not_nil topic_1.id
       assert topic_2.persisted?, 'persisted'
       assert_not_nil topic_2.id
+      assert topic_3.persisted?, 'persisted'
+      assert_not_nil topic_3.id
       assert @first.persisted?, 'persisted'
       assert_not_nil @first.id
       assert @second.destroyed?, 'destroyed'
@@ -419,6 +523,8 @@ class TransactionTest < ActiveRecord::TestCase
     assert_nil topic_1.id
     assert !topic_2.persisted?, 'not persisted'
     assert_nil topic_2.id
+    assert !topic_3.persisted?, 'not persisted'
+    assert_nil topic_3.id
     assert @first.persisted?, 'persisted'
     assert_not_nil @first.id
     assert !@second.destroyed?, 'not destroyed'
@@ -453,22 +559,24 @@ class TransactionTest < ActiveRecord::TestCase
         raise ActiveRecord::Rollback
       end
     end
-
-   ensure
-    Topic.reset_column_information # reset the column information to get correct reading
-    Topic.connection.remove_column('topics', 'stuff') if Topic.column_names.include?('stuff')
-    Topic.reset_column_information # reset the column information again for other tests
+  ensure
+    begin
+      Topic.connection.remove_column('topics', 'stuff')
+    rescue
+    ensure
+      Topic.reset_column_information
+    end
   end
 
   def test_transactions_state_from_rollback
     connection = Topic.connection
-    transaction = ActiveRecord::ConnectionAdapters::ClosedTransaction.new(connection).begin
+    transaction = ActiveRecord::ConnectionAdapters::TransactionManager.new(connection).begin_transaction
 
     assert transaction.open?
     assert !transaction.state.rolledback?
     assert !transaction.state.committed?
 
-    transaction.perform_rollback
+    transaction.rollback
 
     assert transaction.state.rolledback?
     assert !transaction.state.committed?
@@ -476,13 +584,13 @@ class TransactionTest < ActiveRecord::TestCase
 
   def test_transactions_state_from_commit
     connection = Topic.connection
-    transaction = ActiveRecord::ConnectionAdapters::ClosedTransaction.new(connection).begin
+    transaction = ActiveRecord::ConnectionAdapters::TransactionManager.new(connection).begin_transaction
 
     assert transaction.open?
     assert !transaction.state.rolledback?
     assert !transaction.state.committed?
 
-    transaction.perform_commit
+    transaction.commit
 
     assert !transaction.state.rolledback?
     assert transaction.state.committed?
@@ -544,23 +652,23 @@ if current_adapter?(:PostgreSQLAdapter)
   class ConcurrentTransactionTest < TransactionTest
     # This will cause transactions to overlap and fail unless they are performed on
     # separate database connections.
-    def test_transaction_per_thread
-      skip "in memory db can't share a db between threads" if in_memory_db?
-
-      threads = 3.times.map do
-        Thread.new do
-          Topic.transaction do
-            topic = Topic.find(1)
-            topic.approved = !topic.approved?
-            assert topic.save!
-            topic.approved = !topic.approved?
-            assert topic.save!
+    unless in_memory_db?
+      def test_transaction_per_thread
+        threads = 3.times.map do
+          Thread.new do
+            Topic.transaction do
+              topic = Topic.find(1)
+              topic.approved = !topic.approved?
+              assert topic.save!
+              topic.approved = !topic.approved?
+              assert topic.save!
+            end
+            Topic.connection.close
           end
-          Topic.connection.close
         end
-      end
 
-      threads.each { |t| t.join }
+        threads.each { |t| t.join }
+      end
     end
 
     # Test for dirty reads among simultaneous transactions.

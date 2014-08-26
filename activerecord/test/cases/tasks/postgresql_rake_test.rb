@@ -1,5 +1,6 @@
 require 'cases/helper'
 
+if current_adapter?(:PostgreSQLAdapter)
 module ActiveRecord
   class PostgreSQLDBCreateTest < ActiveRecord::TestCase
     def setup
@@ -206,7 +207,7 @@ module ActiveRecord
       @connection.expects(:schema_search_path).returns("foo")
 
       ActiveRecord::Tasks::DatabaseTasks.structure_dump(@configuration, filename)
-      assert File.exists?(filename)
+      assert File.exist?(filename)
     ensure
       FileUtils.rm(filename)
     end
@@ -231,6 +232,14 @@ module ActiveRecord
 
       ActiveRecord::Tasks::DatabaseTasks.structure_load(@configuration, filename)
     end
+
+    def test_structure_load_accepts_path_with_spaces
+      filename = "awesome file.sql"
+      Kernel.expects(:system).with("psql -q -f awesome\\ file.sql my-app-db")
+
+      ActiveRecord::Tasks::DatabaseTasks.structure_load(@configuration, filename)
+    end
   end
 
+end
 end

@@ -176,12 +176,15 @@ task default: :test
                                                  "skip adding entry to Gemfile"
 
       def initialize(*args)
-        raise Error, "Options should be given after the plugin name. For details run: rails plugin new --help" if args[0].blank?
-
         @dummy_path = nil
         super
+
+        unless plugin_path
+          raise Error, "Plugin name should be provided in arguments. For details run: rails plugin new --help"
+        end
       end
 
+      public_task :set_default_accessors!
       public_task :create_root
 
       def create_root_files
@@ -285,6 +288,10 @@ task default: :test
         options[:mountable]
       end
 
+      def skip_git?
+        options[:skip_git]
+      end
+
       def with_dummy_app?
         options[:skip_test_unit].blank? || options[:dummy_path] != 'test/dummy'
       end
@@ -299,6 +306,24 @@ task default: :test
 
       def camelized
         @camelized ||= name.gsub(/\W/, '_').squeeze('_').camelize
+      end
+
+      def author
+        default = "TODO: Write your name"
+        if skip_git?
+          @author = default
+        else
+          @author = `git config user.name`.chomp rescue default
+        end
+      end
+
+      def email
+        default = "TODO: Write your email address"
+        if skip_git?
+          @email = default
+        else
+          @email = `git config user.email`.chomp rescue default
+        end
       end
 
       def valid_const?
@@ -317,7 +342,7 @@ task default: :test
         @application_definition ||= begin
 
           dummy_application_path = File.expand_path("#{dummy_path}/config/application.rb", destination_root)
-          unless options[:pretend] || !File.exists?(dummy_application_path)
+          unless options[:pretend] || !File.exist?(dummy_application_path)
             contents = File.read(dummy_application_path)
             contents[(contents.index(/module ([\w]+)\n(.*)class Application/m))..-1]
           end

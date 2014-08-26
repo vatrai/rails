@@ -21,7 +21,8 @@ class Build
     'amo'  => 'activemodel',
     'as'   => 'activesupport',
     'ar'   => 'activerecord',
-    'av'   => 'actionview'
+    'av'   => 'actionview',
+    'aj'   => 'activejob'
   }
 
   attr_reader :component, :options
@@ -52,7 +53,7 @@ class Build
 
   def tasks
     if activerecord?
-      ['mysql:rebuild_databases', "#{adapter}:#{'isolated_' if isolated?}test"]
+      ['db:mysql:rebuild', "#{adapter}:#{'isolated_' if isolated?}test"]
     else
       ["test#{':isolated' if isolated?}"]
     end

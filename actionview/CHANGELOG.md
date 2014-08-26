@@ -1,161 +1,172 @@
-*   Added an `extname` hash option for `javascript_include_tag` method.
+*   Provide a `builder` object when using the `label` form helper in block form.
+
+    The new `builder` object responds to `translation`, allowing I18n fallback support
+    when you want to customize how a particular label is presented.
+
+    *Alex Robbin*
+
+*   Add I18n support for input/textarea placeholder text.
+
+    Placeholder I18n follows the same convention as `label` I18n.
+
+    *Alex Robbin*
+
+*   Fix that render layout: 'messages/layout' should also be added to the dependency tracker tree.
+
+    *DHH*
+
+*   Add `PartialIteration` object used when rendering collections.
+
+    The iteration object is available as the local variable
+    `#{template_name}_iteration` when rendering partials with collections.
+
+    It gives access to the `size` of the collection being iterated over,
+    the current `index` and two convenience methods `first?` and `last?`.
+
+    *Joel Junström*, *Lucas Uyezu*
+
+*   Return an absolute instead of relative path from an asset url in the case
+    of the `asset_host` proc returning nil
+
+    *Jolyon Pawlyn*
+
+*   Fix `html_escape_once` to properly handle hex escape sequences (e.g. &#x1a2b;)
+
+    *John F. Douthat*
+
+*   Added String support for min and max properties for date field helpers.
+
+    *Todd Bealmear*
+
+*   The `highlight` helper now accepts a block to be used instead of the `highlighter`
+    option.
+
+    *Lucas Mazza*
+
+*   The `except` and `highlight` helpers now accept regular expressions.
+
+    *Jan Szumiec*
+
+*   Flatten the array parameter in `safe_join`, so it behaves consistently with
+    `Array#join`.
+
+    *Paul Grayson*
+
+*   Honor `html_safe` on array elements in tag values, as we do for plain string
+    values.
+
+    *Paul Grayson*
+
+*   Add `ActionView::Template::Handler.unregister_template_handler`.
+
+    It performs the opposite of `ActionView::Template::Handler.register_template_handler`.
+
+    *Zuhao Wan*
+
+*   Bring `cache_digest` rake tasks up-to-date with the latest API changes
+
+    *Jiri Pospisil*
+
+*   Allow custom `:host` option to be passed to `asset_url` helper that
+    overwrites `config.action_controller.asset_host` for particular asset.
+
+    *Hubert Łępicki*
+
+*   Deprecate `AbstractController::Base.parent_prefixes`.
+    Override `AbstractController::Base.local_prefixes` when you want to change
+    where to find views.
+
+    *Nick Sutterer*
+
+*   Take label values into account when doing I18n lookups for model attributes.
+
+    The following:
+
+        # form.html.erb
+        <%= form_for @post do |f| %>
+          <%= f.label :type, value: "long" %>
+        <% end %>
+
+        # en.yml
+        en:
+          activerecord:
+            attributes:
+              post/long: "Long-form Post"
+
+    Used to simply return "long", but now it will return "Long-form
+    Post".
+
+    *Joshua Cody*
+
+*   Change `asset_path` to use File.join to create proper paths:
 
     Before:
 
-        javascript_include_tag('templates.jst')
-        # => <script src="/javascripts/templates.jst.js"></script>
+        https://some.host.com//assets/some.js
 
     After:
 
-        javascript_include_tag('templates.jst', extname: false )
-        # => <script src="/javascripts/templates.jst"></script>
+        https://some.host.com/assets/some.js
 
-    *Nathan Stitt*
+    *Peter Schröder*
 
-*   Fix `current_page?` when the URL contains escaped characters and the
-    original URL is using the hexadecimal lowercased.
-
-    *Rafael Mendonça França*
-
-*   Fix `text_area` to behave like `text_field` when `nil` is given as
-    value.
+*   Change `favicon_link_tag` default mimetype from `image/vnd.microsoft.icon` to
+    `image/x-icon`.
 
     Before:
 
-        f.text_field :field, value: nil #=> <input value="">
-        f.text_area :field, value: nil  #=> <textarea>value of field</textarea>
+        #=> favicon_link_tag 'myicon.ico'
+        <link href="/assets/myicon.ico" rel="shortcut icon" type="image/vnd.microsoft.icon" />
 
     After:
 
-        f.text_area :field, value: nil  #=> <textarea></textarea>
+        #=> favicon_link_tag 'myicon.ico'
+        <link href="/assets/myicon.ico" rel="shortcut icon" type="image/x-icon" />
 
-    *Joel Cogen*
+    *Geoffroy Lorieux*
 
-*   Element of the `grouped_options_for_select` can
-    optionally contain html attributes as the last element of the array.
+*   Remove wrapping div with inline styles for hidden form fields.
 
-        grouped_options_for_select(
-          [["North America", [['United States','US'],"Canada"], data: { foo: 'bar' }]]
-        )
+    We are dropping HTML 4.01 and XHTML strict compliance since input tags directly
+    inside a form are valid HTML5, and the absence of inline styles help in validating
+    for Content Security Policy.
+
+    *Joost Baaij*
+
+*   `collection_check_boxes` respects `:index` option for the hidden filed name.
+
+    Fixes #14147.
 
     *Vasiliy Ermolovich*
 
-*   Fix default rendered format problem when calling `render` without :content_type option.
-    It should return :html. Fix #11393.
+*   `date_select` helper with option `with_css_classes: true` does not overwrite other classes.
 
-    *Gleb Mazovetskiy* *Oleg* *kennyj*
+    *Izumi Wong-Horiuchi*
 
-*   Fix `link_to` with block and url hashes.
+*   `number_to_percentage` does not crash with `Float::NAN` or `Float::INFINITY`
+    as input.
 
-    Before:
+    Fixes #14405.
 
-        link_to(action: 'bar', controller: 'foo') { content_tag(:span, 'Example site') }
-        # => "<a action=\"bar\" controller=\"foo\"><span>Example site</span></a>"
+    *Yves Senn*
 
-    After:
-
-        link_to(action: 'bar', controller: 'foo') { content_tag(:span, 'Example site') }
-        # => "<a href=\"/foo/bar\"><span>Example site</span></a>"
-
-    *Murahashi Sanemat Kenichi*
-
-*   Fix "Stack Level Too Deep" error when redering recursive partials.
-
-    Fixes #11340.
-
-    *Rafael Mendonça França*
-
-*   Added an `enforce_utf8` hash option for `form_tag` method.
-
-    Control to output a hidden input tag with name `utf8` without monkey
-    patching.
-
-    Before:
-
-        form_tag
-        # => '<form>..<input name="utf8" type="hidden" value="&#x2713;" />..</form>'
-
-    After:
-
-        form_tag
-        # => '<form>..<input name="utf8" type="hidden" value="&#x2713;" />..</form>'
-
-        form_tag({}, { :enforce_utf8 => false })
-        # => '<form>....</form>'
-
-    *ma2gedev*
-
-*   Remove the deprecated `include_seconds` argument from `distance_of_time_in_words`,
-    pass in an `:include_seconds` hash option to use this feature.
-
-    *Carlos Antonio da Silva*
-
-*   Remove deprecated block passing to `FormBuilder#new`.
-
-    *Vipul A M*
-
-*   Pick `DateField` `DateTimeField` and `ColorField` values from stringified options allowing use of symbol keys with helpers.
-
-    *Jon Rowe*
-
-*   Remove the deprecated `prompt` argument from `grouped_options_for_select`,
-    pass in a `:prompt` hash option to use this feature.
-
-    *kennyj*
-
-*   Always escape the result of `link_to_unless` method.
-
-    Before:
-
-        link_to_unless(true, '<b>Showing</b>', 'github.com')
-        # => "<b>Showing</b>"
-
-    After:
-
-        link_to_unless(true, '<b>Showing</b>', 'github.com')
-        # => "&lt;b&gt;Showing&lt;/b&gt;"
-
-    *dtaniwaki*
-
-*   Use a case insensitive URI Regexp for #asset_path.
-
-    This fix a problem where the same asset path using different case are generating
-    different URIs.
-
-    Before:
-
-        image_tag("HTTP://google.com")
-        # => "<img alt=\"Google\" src=\"/assets/HTTP://google.com\" />"
-        image_tag("http://google.com")
-        # => "<img alt=\"Google\" src=\"http://google.com\" />"
-
-    After:
-
-        image_tag("HTTP://google.com")
-        # => "<img alt=\"Google\" src=\"HTTP://google.com\" />"
-        image_tag("http://google.com")
-        # => "<img alt=\"Google\" src=\"http://google.com\" />"
-
-    *David Celis*
-
-*   Element of the `collection_check_boxes` and `collection_radio_buttons` can
-    optionally contain html attributes as the last element of the array.
+*   Add `include_hidden` option to `collection_check_boxes` helper.
 
     *Vasiliy Ermolovich*
 
-*   Update the HTML `BOOLEAN_ATTRIBUTES` in `ActionView::Helpers::TagHelper`
-    to conform to the latest HTML 5.1 spec. Add attributes `allowfullscreen`,
-    `default`, `inert`, `sortable`, `truespeed`, `typemustmatch`. Fix attribute
-    `seamless` (previously misspelled `seemless`).
+*   Fixed a problem where the default options for the `button_tag` helper is not
+    applied correctly.
 
-    *Alex Peattie*
+    Fixes #14254.
 
-*   Fix an issue where partials with a number in the filename weren't being digested for cache dependencies.
+    *Sergey Prikhodko*
 
-    *Bryan Ricker*
+*   Take variants into account when calculating template digests in ActionView::Digestor.
 
-*   First release, ActionView extracted from ActionPack
+    The arguments to ActionView::Digestor#digest are now being passed as a hash
+    to support variants and allow more flexibility in the future. The support for
+    regular (required) arguments is deprecated and will be removed in Rails 5.0 or later.
 
-    *Piotr Sarnacki*, *Łukasz Strzałkowski*
+    *Piotr Chmolowski, Łukasz Strzałkowski*
 
-Please check [4-0-stable (ActionPack's CHANGELOG)](https://github.com/rails/rails/blob/4-0-stable/actionpack/CHANGELOG.md) for previous changes.
+Please check [4-1-stable](https://github.com/rails/rails/blob/4-1-stable/actionview/CHANGELOG.md) for previous changes.
