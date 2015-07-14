@@ -228,7 +228,7 @@ module ActionView
         # set by the <tt>layout</tt> method.
         #
         # ==== Returns
-        # * <tt> Boolean</tt> - True if the action has a layout definition, false otherwise.
+        # * <tt>Boolean</tt> - True if the action has a layout definition, false otherwise.
         def _conditional_layout?
           return unless super
 
@@ -262,7 +262,7 @@ module ActionView
       def layout(layout, conditions = {})
         include LayoutConditions unless conditions.empty?
 
-        conditions.each {|k, v| conditions[k] = Array(v).map {|a| a.to_s} }
+        conditions.each {|k, v| conditions[k] = Array(v).map(&:to_s) }
         self._layout_conditions = conditions
 
         self._layout = layout

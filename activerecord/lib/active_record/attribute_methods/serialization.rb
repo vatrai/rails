@@ -8,11 +8,20 @@ module ActiveRecord
         # object, and retrieved as the same object, then specify the name of that
         # attribute using this method and it will be handled automatically. The
         # serialization is done through YAML. If +class_name+ is specified, the
-        # serialized object must be of that class on retrieval or
-        # <tt>SerializationTypeMismatch</tt> will be raised.
+        # serialized object must be of that class on assignment and retrieval.
+        # Otherwise <tt>SerializationTypeMismatch</tt> will be raised.
         #
-        # A notable side effect of serialized attributes is that the model will
-        # be updated on every save, even if it is not dirty.
+        # Empty objects as +{}+, in the case of +Hash+, or +[]+, in the case of
+        # +Array+, will always be persisted as null.
+        #
+        # Keep in mind that database adapters handle certain serialization tasks
+        # for you. For instance: +json+ and +jsonb+ types in PostgreSQL will be
+        # converted between JSON object/array syntax and Ruby +Hash+ or +Array+
+        # objects transparently. There is no need to use +serialize+ in this
+        # case.
+        #
+        # For more complex cases, such as conversion to or from your application
+        # domain objects, consider using the ActiveRecord::Attributes API.
         #
         # ==== Parameters
         #
@@ -51,18 +60,6 @@ module ActiveRecord
           decorate_attribute_type(attr_name, :serialize) do |type|
             Type::Serialized.new(type, coder)
           end
-        end
-
-        def serialized_attributes
-          ActiveSupport::Deprecation.warn(<<-WARNING.strip_heredoc)
-            `serialized_attributes` is deprecated without replacement, and will
-            be removed in Rails 5.0.
-          WARNING
-          @serialized_attributes ||= Hash[
-            columns.select { |t| t.cast_type.is_a?(Type::Serialized) }.map { |c|
-              [c.name, c.cast_type.coder]
-            }
-          ]
         end
       end
     end

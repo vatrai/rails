@@ -1,58 +1,103 @@
-*   Passwords with spaces only allowed in `ActiveModel::SecurePassword`.
+*   Ensure `method_missing` is called for methods passed to
+    `ActiveModel::Serialization#serializable_hash` that don't exist.
 
-    Presence validation can be used to restore old behavior.
+    *Jay Elaraj*
 
-    *Yevhene Shemet*
+*   Add `ActiveModel::Dirty#[attr_name]_previously_changed?` and
+    `ActiveModel::Dirty#[attr_name]_previous_change` to improve access
+    to recorded changes after the model has been saved.
 
-*   Validate options passed to `ActiveModel::Validations.validate`.
+    It makes the dirty-attributes query methods consistent before and after
+    saving.
 
-    Preventing, in many cases, the simple mistake of using `validate` instead of `validates`.
+    *Fernando Tapia Rico*
 
-    *Sonny Michaud*
+*   Deprecate the `:tokenizer` option for `validates_length_of`, in favor of
+    plain Ruby.
 
-*   Deprecate `reset_#{attribute}` in favor of `restore_#{attribute}`.
+    *Sean Griffin*
 
-    These methods may cause confusion with the `reset_changes` that behaves differently
-    of them.
+*   Deprecate `ActiveModel::Errors#add_on_empty` and `ActiveModel::Errors#add_on_blank`
+    with no replacement.
 
-*   Deprecate `ActiveModel::Dirty#reset_changes` in favor of `#clear_changes_information`.
+    *Wojciech Wnętrzak*
 
-    This method name is causing confusion with the `reset_#{attribute}`
-    methods. While `reset_name` set the value of the name attribute for the
-    previous value `reset_changes` only discard the changes and previous
-    changes.
+*   Deprecate `ActiveModel::Errors#get`, `ActiveModel::Errors#set` and
+    `ActiveModel::Errors#[]=` methods that have inconsistent behavior.
 
-*   Added `restore_attributes` method to `ActiveModel::Dirty` API to restore all the
-    changed values to the previous data.
+    *Wojciech Wnętrzak*
 
-    *Igor G.*
+*   Allow symbol as values for `tokenize` of `LengthValidator`.
 
-*   Allow proc and symbol as values for `only_integer` of `NumericalityValidator`
+    *Kensuke Naito*
 
-    *Robin Mehner*
+*   Assigning an unknown attribute key to an `ActiveModel` instance during initialization
+    will now raise `ActiveModel::AttributeAssignment::UnknownAttributeError` instead of
+    `NoMethodError`.
 
-*   `has_secure_password` now verifies that the given password is less than 72
-    characters if validations are enabled.
+    Example:
 
-    Fixes #14591.
+        User.new(foo: 'some value')
+        # => ActiveModel::AttributeAssignment::UnknownAttributeError: unknown attribute 'foo' for User.
 
-    *Akshay Vishnoi*
+    *Eugene Gilburg*
 
-*   Remove deprecated `Validator#setup` without replacement.
+*   Extracted `ActiveRecord::AttributeAssignment` to `ActiveModel::AttributeAssignment`
+    allowing to use it for any object as an includable module.
 
-    See #10716.
+    Example:
 
-    *Kuldeep Aggarwal*
+        class Cat
+          include ActiveModel::AttributeAssignment
+          attr_accessor :name, :status
+        end
 
-*   Add plural and singular form for length validator's default messages.
+        cat = Cat.new
+        cat.assign_attributes(name: "Gorby", status: "yawning")
+        cat.name   # => 'Gorby'
+        cat.status # => 'yawning'
+        cat.assign_attributes(status: "sleeping")
+        cat.name   # => 'Gorby'
+        cat.status # => 'sleeping'
 
-    *Abd ar-Rahman Hamid*
+    *Bogdan Gusiev*
 
-*   Introduce `validate` as an alias for `valid?`.
+*   Add `ActiveModel::Errors#details`
 
-    This is more intuitive when you want to run validations but don't care about
-    the return value.
+    To be able to return type of used validator, one can now call `details`
+    on errors instance.
 
-    *Henrik Nyh*
+    Example:
 
-Please check [4-1-stable](https://github.com/rails/rails/blob/4-1-stable/activemodel/CHANGELOG.md) for previous changes.
+        class User < ActiveRecord::Base
+          validates :name, presence: true
+        end
+
+        user = User.new; user.valid?; user.errors.details
+        => {name: [{error: :blank}]}
+
+    *Wojciech Wnętrzak*
+
+*   Change validates_acceptance_of to accept true by default.
+
+    The default for validates_acceptance_of is now "1" and true.
+    In the past, only "1" was the default and you were required to add
+    accept: true.
+
+*   Remove deprecated `ActiveModel::Dirty#reset_#{attribute}` and
+    `ActiveModel::Dirty#reset_changes`.
+
+    *Rafael Mendonça França*
+
+*   Change the way in which callback chains can be halted.
+
+    The preferred method to halt a callback chain from now on is to explicitly
+    `throw(:abort)`.
+    In the past, returning `false` in an ActiveModel or ActiveModel::Validations
+    `before_` callback had the side effect of halting the callback chain.
+    This is not recommended anymore and, depending on the value of the
+    `config.active_support.halt_callback_chains_on_return_false` option, will
+    either not work at all or display a deprecation warning.
+
+
+Please check [4-2-stable](https://github.com/rails/rails/blob/4-2-stable/activemodel/CHANGELOG.md) for previous changes.

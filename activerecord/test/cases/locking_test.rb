@@ -5,6 +5,7 @@ require 'models/job'
 require 'models/reader'
 require 'models/ship'
 require 'models/legacy_thing'
+require 'models/personal_legacy_thing'
 require 'models/reference'
 require 'models/string_key_object'
 require 'models/car'
@@ -31,8 +32,6 @@ class OptimisticLockingTest < ActiveRecord::TestCase
   def test_quote_value_passed_lock_col
     p1 = Person.find(1)
     assert_equal 0, p1.lock_version
-
-    Person.expects(:quote_value).with(0, Person.columns_hash[Person.locking_column]).returns('0').once
 
     p1.first_name = 'anika2'
     p1.save!
@@ -178,6 +177,16 @@ class OptimisticLockingTest < ActiveRecord::TestCase
     assert_equal 1, p1.lock_version
   end
 
+  def test_touch_stale_object
+    person = Person.create!(first_name: 'Mehmet Emin')
+    stale_person = Person.find(person.id)
+    person.update_attribute(:gender, 'M')
+
+    assert_raises(ActiveRecord::StaleObjectError) do
+      stale_person.touch
+    end
+  end
+
   def test_lock_column_name_existing
     t1 = LegacyThing.find(1)
     t2 = LegacyThing.find(1)
@@ -216,10 +225,12 @@ class OptimisticLockingTest < ActiveRecord::TestCase
   def test_lock_with_custom_column_without_default_sets_version_to_zero
     t1 = LockWithCustomColumnWithoutDefault.new
     assert_equal 0, t1.custom_lock_version
+    assert_nil t1.custom_lock_version_before_type_cast
 
-    t1.save
-    t1 = LockWithCustomColumnWithoutDefault.find(t1.id)
+    t1.save!
+    t1.reload
     assert_equal 0, t1.custom_lock_version
+    assert [0, "0"].include?(t1.custom_lock_version_before_type_cast)
   end
 
   def test_readonly_attributes
@@ -284,10 +295,10 @@ end
 class OptimisticLockingWithSchemaChangeTest < ActiveRecord::TestCase
   fixtures :people, :legacy_things, :references
 
-  # need to disable transactional fixtures, because otherwise the sqlite3
+  # need to disable transactional tests, because otherwise the sqlite3
   # adapter (at least) chokes when we try and change the schema in the middle
   # of a test (see test_increment_counter_*).
-  self.use_transactional_fixtures = false
+  self.use_transactional_tests = false
 
   { :lock_version => Person, :custom_lock_version => LegacyThing }.each do |name, model|
     define_method("test_increment_counter_updates_#{name}") do
@@ -311,30 +322,24 @@ class OptimisticLockingWithSchemaChangeTest < ActiveRecord::TestCase
 
   # See Lighthouse ticket #1966
   def test_destroy_dependents
-    # Establish dependent relationship between People and LegacyThing
-    add_counter_column_to(Person, 'legacy_things_count')
-    LegacyThing.connection.add_column LegacyThing.table_name, 'person_id', :integer
-    LegacyThing.reset_column_information
-    LegacyThing.class_eval do
-      belongs_to :person, :counter_cache => true
-    end
-    Person.class_eval do
-      has_many :legacy_things, :dependent => :destroy
-    end
+    # Establish dependent relationship between Person and PersonalLegacyThing
+    add_counter_column_to(Person, 'personal_legacy_things_count')
+    PersonalLegacyThing.reset_column_information
 
     # Make sure that counter incrementing doesn't cause problems
     p1 = Person.new(:first_name => 'fjord')
     p1.save!
-    t = LegacyThing.new(:person => p1)
+    t = PersonalLegacyThing.new(:person => p1)
     t.save!
     p1.reload
-    assert_equal 1, p1.legacy_things_count
+    assert_equal 1, p1.personal_legacy_things_count
     assert p1.destroy
     assert_equal true, p1.frozen?
     assert_raises(ActiveRecord::RecordNotFound) { Person.find(p1.id) }
-    assert_raises(ActiveRecord::RecordNotFound) { LegacyThing.find(t.id) }
+    assert_raises(ActiveRecord::RecordNotFound) { PersonalLegacyThing.find(t.id) }
   ensure
-    remove_counter_column_from(Person, 'legacy_things_count')
+    remove_counter_column_from(Person, 'personal_legacy_things_count')
+    PersonalLegacyThing.reset_column_information
   end
 
   private
@@ -370,7 +375,7 @@ end
 # (See exec vs. async_exec in the PostgreSQL adapter.)
 unless in_memory_db?
   class PessimisticLockingTest < ActiveRecord::TestCase
-    self.use_transactional_fixtures = false
+    self.use_transactional_tests = false
     fixtures :people, :readers
 
     def setup

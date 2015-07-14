@@ -3,7 +3,7 @@ require 'active_support/tagged_logging'
 require 'active_support/logger'
 
 module ActiveJob
-  module Logging
+  module Logging #:nodoc:
     extend ActiveSupport::Concern
 
     included do
@@ -17,7 +17,7 @@ module ActiveJob
 
       around_perform do |job, block, _|
         tag_logger(job.class.name, job.job_id) do
-          payload = {adapter: job.class.queue_adapter, job: job.class, args: job.arguments}
+          payload = {adapter: job.class.queue_adapter, job: job}
           ActiveSupport::Notifications.instrument("perform_start.active_job", payload.dup)
           ActiveSupport::Notifications.instrument("perform.active_job", payload) do
             block.call
@@ -26,12 +26,12 @@ module ActiveJob
       end
 
       before_enqueue do |job|
-        if job.enqueued_at
+        if job.scheduled_at
           ActiveSupport::Notifications.instrument "enqueue_at.active_job",
-            adapter: job.class.queue_adapter, job: job.class, job_id: job.job_id, args: job.arguments, timestamp: job.enqueued_at
+            adapter: job.class.queue_adapter, job: job
         else
           ActiveSupport::Notifications.instrument "enqueue.active_job",
-            adapter: job.class.queue_adapter, job: job.class, job_id: job.job_id, args: job.arguments
+            adapter: job.class.queue_adapter, job: job
         end
       end
     end
@@ -50,34 +50,51 @@ module ActiveJob
         logger.formatter.current_tags.include?("ActiveJob")
       end
 
-    class LogSubscriber < ActiveSupport::LogSubscriber
+    class LogSubscriber < ActiveSupport::LogSubscriber #:nodoc:
       def enqueue(event)
-        info { "Enqueued #{event.payload[:job].name} (Job ID: #{event.payload[:job_id]}) to #{queue_name(event)}" + args_info(event) }
+        info do
+          job = event.payload[:job]
+          "Enqueued #{job.class.name} (Job ID: #{job.job_id}) to #{queue_name(event)}" + args_info(job)
+        end
       end
 
       def enqueue_at(event)
-        info { "Enqueued #{event.payload[:job].name} (Job ID: #{event.payload[:job_id]}) to #{queue_name(event)} at #{enqueued_at(event)}" + args_info(event) }
+        info do
+          job = event.payload[:job]
+          "Enqueued #{job.class.name} (Job ID: #{job.job_id}) to #{queue_name(event)} at #{scheduled_at(event)}" + args_info(job)
+        end
       end
 
       def perform_start(event)
-        info { "Performing #{event.payload[:job].name} from #{queue_name(event)}" + args_info(event) }
+        info do
+          job = event.payload[:job]
+          "Performing #{job.class.name} from #{queue_name(event)}" + args_info(job)
+        end
       end
 
       def perform(event)
-        info { "Performed #{event.payload[:job].name} from #{queue_name(event)} in #{event.duration.round(2).to_s}ms" }
+        info do
+          job = event.payload[:job]
+          "Performed #{job.class.name} from #{queue_name(event)} in #{event.duration.round(2)}ms"
+        end
       end
 
       private
         def queue_name(event)
-          event.payload[:adapter].name.demodulize.remove('Adapter') + "(#{event.payload[:job].queue_name})"
+          event.payload[:adapter].class.name.demodulize.remove('Adapter') + "(#{event.payload[:job].queue_name})"
         end
 
-        def args_info(event)
-          event.payload[:args].any? ? " with arguments: #{event.payload[:args].map(&:inspect).join(", ")}" : ""
+        def args_info(job)
+          if job.arguments.any?
+            ' with arguments: ' +
+              job.arguments.map { |arg| arg.try(:to_global_id).try(:to_s) || arg.inspect }.join(', ')
+          else
+            ''
+          end
         end
 
-        def enqueued_at(event)
-          Time.at(event.payload[:timestamp]).utc
+        def scheduled_at(event)
+          Time.at(event.payload[:job].scheduled_at).utc
         end
 
         def logger

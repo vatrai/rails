@@ -49,7 +49,7 @@ behavior out of the box:
         send("#{attr}=", nil)
       end
     end
-  
+
     person = Person.new
     person.clear_name
     person.clear_age
@@ -132,7 +132,7 @@ behavior out of the box:
         "Name"
       end
     end
-  
+
     person = Person.new
     person.name = nil
     person.validate!
@@ -154,7 +154,7 @@ behavior out of the box:
 
 * Making objects serializable
 
-  ActiveModel::Serialization provides a standard interface for your object
+  <tt>ActiveModel::Serialization</tt> provides a standard interface for your object
   to provide +to_json+ or +to_xml+ serialization.
 
     class SerialPerson
@@ -216,10 +216,10 @@ behavior out of the box:
   {Learn more}[link:classes/ActiveModel/Validations.html]
 
 * Custom validators
-  
+
     class HasNameValidator < ActiveModel::Validator
       def validate(record)
-        record.errors[:name] = "must exist" if record.name.blank?
+        record.errors.add(:name, "must exist") if record.name.blank?
       end
     end
 
@@ -242,7 +242,7 @@ behavior out of the box:
 
 The latest version of Active Model can be installed with RubyGems:
 
-  % [sudo] gem install activemodel
+  % gem install activemodel
 
 Source code can be downloaded as part of the Rails project on GitHub
 

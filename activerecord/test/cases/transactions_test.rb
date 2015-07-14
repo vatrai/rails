@@ -2,17 +2,18 @@ require "cases/helper"
 require 'models/topic'
 require 'models/reply'
 require 'models/developer'
+require 'models/computer'
 require 'models/book'
 require 'models/author'
 require 'models/post'
 require 'models/movie'
 
 class TransactionTest < ActiveRecord::TestCase
-  self.use_transactional_fixtures = false
+  self.use_transactional_tests = false
   fixtures :topics, :developers, :authors, :posts
 
   def setup
-    @first, @second = Topic.find(1, 2).sort_by { |t| t.id }
+    @first, @second = Topic.find(1, 2).sort_by(&:id)
   end
 
   def test_persisted_in_a_model_with_custom_primary_key_after_failed_save
@@ -191,6 +192,16 @@ class TransactionTest < ActiveRecord::TestCase
       author.update!(name: nil, post_ids: [])
     end
     assert_equal posts_count, author.posts(true).size
+  end
+
+  def test_cancellation_from_returning_false_in_before_filter
+    def @first.before_save_for_transaction
+      false
+    end
+
+    assert_deprecated do
+      @first.save
+    end
   end
 
   def test_cancellation_from_before_destroy_rollbacks_in_destroy
@@ -492,6 +503,34 @@ class TransactionTest < ActiveRecord::TestCase
     assert topic.frozen?, 'not frozen'
   end
 
+  def test_rollback_when_thread_killed
+    return if in_memory_db?
+
+    queue = Queue.new
+    thread = Thread.new do
+      Topic.transaction do
+        @first.approved  = true
+        @second.approved = false
+        @first.save
+
+        queue.push nil
+        sleep
+
+        @second.save
+      end
+    end
+
+    queue.pop
+    thread.kill
+    thread.join
+
+    assert @first.approved?, "First should still be changed in the objects"
+    assert !@second.approved?, "Second should still be changed in the objects"
+
+    assert !Topic.find(1).approved?, "First shouldn't have been approved"
+    assert Topic.find(2).approved?, "Second should still be approved"
+  end
+
   def test_restore_active_record_state_for_all_records_in_a_transaction
     topic_without_callbacks = Class.new(ActiveRecord::Base) do
       self.table_name = 'topics'
@@ -528,6 +567,39 @@ class TransactionTest < ActiveRecord::TestCase
     assert @first.persisted?, 'persisted'
     assert_not_nil @first.id
     assert !@second.destroyed?, 'not destroyed'
+  end
+
+  def test_restore_frozen_state_after_double_destroy
+    topic = Topic.create
+    reply = topic.replies.create
+
+    Topic.transaction do
+      topic.destroy # calls #destroy on reply (since dependent: destroy)
+      reply.destroy
+
+      raise ActiveRecord::Rollback
+    end
+
+    assert_not reply.frozen?
+    assert_not topic.frozen?
+  end
+
+  def test_rollback_of_frozen_records
+    topic = Topic.create.freeze
+    Topic.transaction do
+      topic.destroy
+      raise ActiveRecord::Rollback
+    end
+    assert topic.frozen?, 'frozen'
+  end
+
+  def test_rollback_for_freshly_persisted_records
+    topic = Topic.create
+    Topic.transaction do
+      topic.destroy
+      raise ActiveRecord::Rollback
+    end
+    assert topic.persisted?, 'persisted'
   end
 
   def test_sqlite_add_column_in_transaction
@@ -596,6 +668,27 @@ class TransactionTest < ActiveRecord::TestCase
     assert transaction.state.committed?
   end
 
+  def test_transaction_rollback_with_primarykeyless_tables
+    connection = ActiveRecord::Base.connection
+    connection.create_table(:transaction_without_primary_keys, force: true, id: false) do |t|
+       t.integer :thing_id
+    end
+
+    klass = Class.new(ActiveRecord::Base) do
+      self.table_name = 'transaction_without_primary_keys'
+      after_commit { } # necessary to trigger the has_transactional_callbacks branch
+    end
+
+    assert_no_difference(-> { klass.count }) do
+      ActiveRecord::Base.transaction do
+        klass.create!
+        raise ActiveRecord::Rollback
+      end
+    end
+  ensure
+    connection.drop_table 'transaction_without_primary_keys', if_exists: true
+  end
+
   private
 
   %w(validation save destroy).each do |filter|
@@ -603,14 +696,14 @@ class TransactionTest < ActiveRecord::TestCase
       meta = class << topic; self; end
       meta.send("define_method", "before_#{filter}_for_transaction") do
         Book.create
-        false
+        throw(:abort)
       end
     end
   end
 end
 
 class TransactionsWithTransactionalFixturesTest < ActiveRecord::TestCase
-  self.use_transactional_fixtures = true
+  self.use_transactional_tests = true
   fixtures :topics
 
   def test_automatic_savepoint_in_outer_transaction
@@ -667,7 +760,7 @@ if current_adapter?(:PostgreSQLAdapter)
           end
         end
 
-        threads.each { |t| t.join }
+        threads.each(&:join)
       end
     end
 
@@ -715,7 +808,7 @@ if current_adapter?(:PostgreSQLAdapter)
           Developer.connection.close
         end
 
-        threads.each { |t| t.join }
+        threads.each(&:join)
       end
 
       assert_equal original_salary, Developer.find(1).salary

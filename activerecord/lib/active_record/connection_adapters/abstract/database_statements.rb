@@ -40,8 +40,9 @@ module ActiveRecord
 
       # Returns a single value from a record
       def select_value(arel, name = nil, binds = [])
-        if result = select_one(arel, name, binds)
-          result.values.first
+        arel, binds = binds_from_relation arel, binds
+        if result = select_rows(to_sql(arel, binds), name, binds).first
+          result.first
         end
       end
 
@@ -81,6 +82,11 @@ module ActiveRecord
       # the executed +sql+ statement.
       def exec_delete(sql, name, binds)
         exec_query(sql, name, binds)
+      end
+
+      # Executes the truncate statement.
+      def truncate(table_name, name = nil)
+        raise NotImplementedError
       end
 
       # Executes update +sql+ statement in the context of this connection using
@@ -131,7 +137,7 @@ module ActiveRecord
       #
       # In order to get around this problem, #transaction will emulate the effect
       # of nested transactions, by using savepoints:
-      # http://dev.mysql.com/doc/refman/5.0/en/savepoint.html
+      # http://dev.mysql.com/doc/refman/5.6/en/savepoint.html
       # Savepoints are supported by MySQL and PostgreSQL. SQLite3 version >= '3.6.8'
       # supports savepoints.
       #
@@ -183,8 +189,8 @@ module ActiveRecord
       # You should consult the documentation for your database to understand the
       # semantics of these different levels:
       #
-      # * http://www.postgresql.org/docs/9.1/static/transaction-iso.html
-      # * https://dev.mysql.com/doc/refman/5.0/en/set-transaction.html
+      # * http://www.postgresql.org/docs/current/static/transaction-iso.html
+      # * https://dev.mysql.com/doc/refman/5.6/en/set-transaction.html
       #
       # An <tt>ActiveRecord::TransactionIsolationError</tt> will be raised if:
       #
@@ -196,16 +202,14 @@ module ActiveRecord
       # isolation level. However, support is disabled for MySQL versions below 5,
       # because they are affected by a bug[http://bugs.mysql.com/bug.php?id=39170]
       # which means the isolation level gets persisted outside the transaction.
-      def transaction(options = {})
-        options.assert_valid_keys :requires_new, :joinable, :isolation
-
-        if !options[:requires_new] && current_transaction.joinable?
-          if options[:isolation]
+      def transaction(requires_new: nil, isolation: nil, joinable: true)
+        if !requires_new && current_transaction.joinable?
+          if isolation
             raise ActiveRecord::TransactionIsolationError, "cannot set isolation when joining a transaction"
           end
           yield
         else
-          transaction_manager.within_new_transaction(options) { yield }
+          transaction_manager.within_new_transaction(isolation: isolation, joinable: joinable) { yield }
         end
       rescue ActiveRecord::Rollback
         # rollbacks are silently swallowed
@@ -227,6 +231,10 @@ module ActiveRecord
       # can be called.
       def add_transaction_record(record)
         current_transaction.add_record(record)
+      end
+
+      def transaction_state
+        current_transaction.state
       end
 
       # Begins the transaction (and turns off auto-committing).
@@ -253,7 +261,18 @@ module ActiveRecord
 
       # Rolls back the transaction (and turns on auto-committing). Must be
       # done if the transaction block raises an exception or returns false.
-      def rollback_db_transaction() end
+      def rollback_db_transaction
+        exec_rollback_db_transaction
+      end
+
+      def exec_rollback_db_transaction() end #:nodoc:
+
+      def rollback_to_savepoint(name = nil)
+        exec_rollback_to_savepoint(name)
+      end
+
+      def exec_rollback_to_savepoint(name = nil) #:nodoc:
+      end
 
       def default_sequence_name(table, column)
         nil
@@ -269,10 +288,17 @@ module ActiveRecord
       def insert_fixture(fixture, table_name)
         columns = schema_cache.columns_hash(table_name)
 
-        key_list   = []
-        value_list = fixture.map do |name, value|
-          key_list << quote_column_name(name)
-          quote(value, columns[name])
+        binds = fixture.map do |name, value|
+          type = lookup_cast_type_from_column(columns[name])
+          Relation::QueryAttribute.new(name, value, type)
+        end
+        key_list = fixture.keys.map { |name| quote_column_name(name) }
+        value_list = prepare_binds_for_database(binds).map do |value|
+          begin
+            quote(value)
+          rescue TypeError
+            quote(YAML.dump(value))
+          end
         end
 
         execute "INSERT INTO #{quote_table_name(table_name)} (#{key_list.join(', ')}) VALUES (#{value_list.join(', ')})", 'Fixture Insert'
@@ -280,10 +306,6 @@ module ActiveRecord
 
       def empty_insert_statement_value
         "DEFAULT VALUES"
-      end
-
-      def limited_update_conditions(where_sql, quoted_table_name, quoted_primary_key)
-        "WHERE #{quoted_primary_key} IN (SELECT #{quoted_primary_key} FROM #{quoted_table_name} #{where_sql})"
       end
 
       # Sanitizes the given LIMIT parameter in order to prevent SQL injection.
@@ -332,8 +354,9 @@ module ActiveRecord
 
         # Returns an ActiveRecord::Result instance.
         def select(sql, name = nil, binds = [])
+          exec_query(sql, name, binds)
         end
-        undef_method :select
+
 
         # Returns the last auto-generated ID from the affected table.
         def insert_sql(sql, name = nil, pk = nil, id_value = nil, sequence_name = nil)
@@ -362,7 +385,7 @@ module ActiveRecord
 
         def binds_from_relation(relation, binds)
           if relation.is_a?(Relation) && binds.empty?
-            relation, binds = relation.arel, relation.bind_values
+            relation, binds = relation.arel, relation.bound_attributes
           end
           [relation, binds]
         end

@@ -18,7 +18,7 @@ class SanitizeHelperTest < ActionView::TestCase
 
   def test_should_sanitize_illegal_style_properties
     raw      = %(display:block; position:absolute; left:0; top:0; width:100%; height:100%; z-index:1; background-color:black; background-image:url(http://www.ragingplatypus.com/i/cam-full.jpg); background-x:center; background-y:center; background-repeat:repeat;)
-    expected = %(display: block; width: 100%; height: 100%; background-color: black; background-image: ; background-x: center; background-y: center;)
+    expected = %(display: block; width: 100%; height: 100%; background-color: black; background-x: center; background-y: center;)
     assert_equal expected, sanitize_css(raw)
   end
 
@@ -27,6 +27,10 @@ class SanitizeHelperTest < ActionView::TestCase
     assert_equal("This is a test.", strip_tags("<p>This <u>is<u> a <a href='test.html'><strong>test</strong></a>.</p>"))
     assert_equal "This has a  here.", strip_tags("This has a <!-- comment --> here.")
     assert_equal "", strip_tags("<script>")
+  end
+
+  def test_strip_tags_will_not_encode_special_characters
+    assert_equal "test\r\n\r\ntest", strip_tags("test\r\n\r\ntest")
   end
 
   def test_sanitize_is_marked_safe

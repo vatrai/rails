@@ -1,3 +1,5 @@
+**DO NOT READ THIS FILE ON GITHUB, GUIDES ARE PUBLISHED ON http://guides.rubyonrails.org.**
+
 Ruby on Rails Guides Guidelines
 ===============================
 
@@ -54,6 +56,7 @@ API Documentation Guidelines
 The guides and the API should be coherent and consistent where appropriate. In particular, these sections of the [API Documentation Guidelines](api_documentation_guidelines.html) also apply to the guides:
 
 * [Wording](api_documentation_guidelines.html#wording)
+* [English](api_documentation_guidelines.html#english)
 * [Example Code](api_documentation_guidelines.html#example-code)
 * [Filenames](api_documentation_guidelines.html#file-names)
 * [Fonts](api_documentation_guidelines.html#fonts)
@@ -61,7 +64,9 @@ The guides and the API should be coherent and consistent where appropriate. In p
 HTML Guides
 -----------
 
-Before generating the guides, make sure that you have the latest version of Bundler installed on your system. As of this writing, you must install Bundler 1.3.5 on your device.
+Before generating the guides, make sure that you have the latest version of
+Bundler installed on your system. As of this writing, you must install Bundler
+1.3.5 or later on your device.
 
 To install the latest version of Bundler, run `gem install bundler`.
 
@@ -78,6 +83,8 @@ or
 ```
 bundle exec rake guides:generate:html
 ```
+
+Resulting HTML files can be found in the `./output` directory.
 
 To process `my_guide.md` and nothing else use the `ONLY` environment variable:
 

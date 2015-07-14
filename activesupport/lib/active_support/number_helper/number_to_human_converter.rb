@@ -23,7 +23,7 @@ module ActiveSupport
         unit = determine_unit(units, exponent)
 
         rounded_number = NumberToRoundedConverter.convert(number, options)
-        format.gsub(/%n/, rounded_number).gsub(/%u/, unit).strip
+        format.gsub('%n'.freeze, rounded_number).gsub('%u'.freeze, unit).strip
       end
 
       private
@@ -59,7 +59,7 @@ module ActiveSupport
             translate_in_locale("human.decimal_units.units", raise: true)
           else
             raise ArgumentError, ":units must be a Hash or String translation scope."
-          end.keys.map { |e_name| INVERTED_DECIMAL_UNITS[e_name] }.sort_by { |e| -e }
+          end.keys.map { |e_name| INVERTED_DECIMAL_UNITS[e_name] }.sort_by(&:-@)
         end
     end
   end

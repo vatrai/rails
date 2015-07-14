@@ -1,4 +1,3 @@
-# encoding: utf-8
 require 'abstract_unit'
 require 'set'
 
@@ -10,6 +9,8 @@ require 'mailers/proc_mailer'
 require 'mailers/asset_mailer'
 
 class BaseTest < ActiveSupport::TestCase
+  include Rails::Dom::Testing::Assertions::DomAssertions
+
   setup do
     @original_delivery_method = ActionMailer::Base.delivery_method
     ActionMailer::Base.delivery_method = :test
@@ -259,6 +260,20 @@ class BaseTest < ActiveSupport::TestCase
     assert_match(/Can't add attachments after `mail` was called./, e.message)
   end
 
+  test "adding inline attachments while rendering mail works" do
+    class LateInlineAttachmentMailer < ActionMailer::Base
+      def on_render
+        mail from: "welcome@example.com", to: "to@example.com"
+      end
+    end
+
+    mail = LateInlineAttachmentMailer.on_render
+    assert_nothing_raised { mail.message }
+
+    assert_equal ["image/jpeg; filename=controller_attachments.jpg",
+                  "image/jpeg; filename=attachments.jpg"], mail.attachments.inline.map {|a| a['Content-Type'].to_s }
+  end
+
   test "accessing attachments works after mail was called" do
     class LateAttachmentAccessorMailer < ActionMailer::Base
       def welcome
@@ -271,7 +286,7 @@ class BaseTest < ActiveSupport::TestCase
       end
     end
 
-    assert_nothing_raised { LateAttachmentAccessorMailer.welcome }
+    assert_nothing_raised { LateAttachmentAccessorMailer.welcome.message }
   end
 
   # Implicit multipart
@@ -337,9 +352,34 @@ class BaseTest < ActiveSupport::TestCase
       assert_equal("text/plain", email.parts[0].mime_type)
       assert_equal("Implicit with locale PL TEXT", email.parts[0].body.encoded)
       assert_equal("text/html", email.parts[1].mime_type)
-      assert_equal("Implicit with locale HTML", email.parts[1].body.encoded)
+      assert_equal("Implicit with locale EN HTML", email.parts[1].body.encoded)
     end
   end
+
+  test "implicit multipart with fallback locale" do
+    fallback_backend = Class.new(I18n::Backend::Simple) do
+      include I18n::Backend::Fallbacks
+    end
+
+    begin
+      backend = I18n.backend
+      I18n.backend = fallback_backend.new
+      I18n.fallbacks[:"de-AT"] = [:de]
+
+      swap I18n, locale: 'de-AT' do
+        email = BaseMailer.implicit_with_locale
+        assert_equal(2, email.parts.size)
+        assert_equal("multipart/alternative", email.mime_type)
+        assert_equal("text/plain", email.parts[0].mime_type)
+        assert_equal("Implicit with locale DE-AT TEXT", email.parts[0].body.encoded)
+        assert_equal("text/html", email.parts[1].mime_type)
+        assert_equal("Implicit with locale DE HTML", email.parts[1].body.encoded)
+      end
+    ensure
+      I18n.backend = backend
+    end
+  end
+
 
   test "implicit multipart with several view paths uses the first one with template" do
     old = BaseMailer.view_paths
@@ -522,7 +562,7 @@ class BaseTest < ActiveSupport::TestCase
 
     mail = AssetMailer.welcome
 
-    assert_equal(%{<img alt="Dummy" src="http://global.com/images/dummy.png" />}, mail.body.to_s.strip)
+    assert_dom_equal(%{<img alt="Dummy" src="http://global.com/images/dummy.png" />}, mail.body.to_s.strip)
   end
 
   test "assets tags should use a Mailer's asset_host settings when available" do
@@ -536,7 +576,7 @@ class BaseTest < ActiveSupport::TestCase
 
     mail = TempAssetMailer.welcome
 
-    assert_equal(%{<img alt="Dummy" src="http://local.com/images/dummy.png" />}, mail.body.to_s.strip)
+    assert_dom_equal(%{<img alt="Dummy" src="http://local.com/images/dummy.png" />}, mail.body.to_s.strip)
   end
 
   test 'the view is not rendered when mail was never called' do

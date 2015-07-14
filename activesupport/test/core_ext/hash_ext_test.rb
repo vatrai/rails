@@ -365,7 +365,7 @@ class HashExtTest < ActiveSupport::TestCase
       :member? => true }
 
     hashes.each do |name, hash|
-      method_map.sort_by { |m| m.to_s }.each do |meth, expected|
+      method_map.sort_by(&:to_s).each do |meth, expected|
         assert_equal(expected, hash.__send__(meth, 'a'),
                      "Calling #{name}.#{meth} 'a'")
         assert_equal(expected, hash.__send__(meth, :a),
@@ -524,6 +524,10 @@ class HashExtTest < ActiveSupport::TestCase
   end
 
   def test_indifferent_reverse_merging
+    hash = HashWithIndifferentAccess.new key: :old_value
+    hash.reverse_merge! key: :new_value
+    assert_equal :old_value, hash[:key]
+
     hash = HashWithIndifferentAccess.new('some' => 'value', 'other' => 'value')
     hash.reverse_merge!(:some => 'noclobber', :another => 'clobber')
     assert_equal 'value', hash[:some]
@@ -961,10 +965,11 @@ class HashExtTest < ActiveSupport::TestCase
     assert_raise(RuntimeError) { original.except!(:a) }
   end
 
-  def test_except_with_mocha_expectation_on_original
+  def test_except_does_not_delete_values_in_original
     original = { :a => 'x', :b => 'y' }
-    original.expects(:delete).never
-    original.except(:a)
+    assert_not_called(original, :delete) do
+      original.except(:a)
+    end
   end
 
   def test_compact
@@ -997,6 +1002,37 @@ class HashExtTest < ActiveSupport::TestCase
     hash = HashWithIndifferentAccess.new(HashByConversion.new(a: 1))
     assert hash.key?('a')
     assert_equal 1, hash[:a]
+  end
+
+  def test_dup_with_default_proc
+    hash = HashWithIndifferentAccess.new
+    hash.default_proc = proc { |h, v| raise "walrus" }
+    assert_nothing_raised { hash.dup }
+  end
+
+  def test_dup_with_default_proc_sets_proc
+    hash = HashWithIndifferentAccess.new
+    hash.default_proc = proc { |h, k| k + 1 }
+    new_hash = hash.dup
+
+    assert_equal 3, new_hash[2]
+
+    new_hash.default = 2
+    assert_equal 2, new_hash[:non_existant]
+  end
+
+  def test_to_hash_with_raising_default_proc
+    hash = HashWithIndifferentAccess.new
+    hash.default_proc = proc { |h, k| raise "walrus" }
+
+    assert_nothing_raised { hash.to_hash }
+  end
+
+  def test_new_from_hash_copying_default_should_not_raise_when_default_proc_does
+    hash = Hash.new
+    hash.default_proc = proc { |h, k| raise "walrus" }
+
+    assert_nothing_raised { HashWithIndifferentAccess.new_from_hash_copying_default(hash) }
   end
 end
 
@@ -1547,6 +1583,14 @@ class HashToXmlTest < ActiveSupport::TestCase
     hash_wia = HashWithIndifferentAccess.new
     assert_equal hash_wia, hash_wia.with_indifferent_access
     assert_not_same hash_wia, hash_wia.with_indifferent_access
+  end
+
+
+  def test_allows_setting_frozen_array_values_with_indifferent_access
+    value = [1, 2, 3].freeze
+    hash = HashWithIndifferentAccess.new
+    hash[:key] = value
+    assert_equal hash[:key], value
   end
 
   def test_should_copy_the_default_value_when_converting_to_hash_with_indifferent_access

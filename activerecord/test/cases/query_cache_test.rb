@@ -184,7 +184,7 @@ class QueryCacheTest < ActiveRecord::TestCase
       # Oracle adapter returns count() as Fixnum or Float
       if current_adapter?(:OracleAdapter)
         assert_kind_of Numeric, Task.connection.select_value("SELECT count(*) AS count_all FROM tasks")
-      elsif current_adapter?(:SQLite3Adapter, :Mysql2Adapter)
+      elsif current_adapter?(:SQLite3Adapter, :Mysql2Adapter, :PostgreSQLAdapter)
         # Future versions of the sqlite3 adapter will return numeric
         assert_instance_of Fixnum,
          Task.connection.select_value("SELECT count(*) AS count_all FROM tasks")
@@ -211,6 +211,38 @@ class QueryCacheTest < ActiveRecord::TestCase
     end
   ensure
     ActiveRecord::Base.configurations = conf
+  end
+
+  def test_query_cache_doesnt_leak_cached_results_of_rolled_back_queries
+    ActiveRecord::Base.connection.enable_query_cache!
+    post = Post.first
+
+    Post.transaction do
+      post.update_attributes(title: 'rollback')
+      assert_equal 1, Post.where(title: 'rollback').to_a.count
+      raise ActiveRecord::Rollback
+    end
+
+    assert_equal 0, Post.where(title: 'rollback').to_a.count
+
+    ActiveRecord::Base.connection.uncached do
+      assert_equal 0, Post.where(title: 'rollback').to_a.count
+    end
+
+    begin
+      Post.transaction do
+        post.update_attributes(title: 'rollback')
+        assert_equal 1, Post.where(title: 'rollback').to_a.count
+        raise 'broken'
+      end
+    rescue Exception
+    end
+
+    assert_equal 0, Post.where(title: 'rollback').to_a.count
+
+    ActiveRecord::Base.connection.uncached do
+      assert_equal 0, Post.where(title: 'rollback').to_a.count
+    end
   end
 end
 

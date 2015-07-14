@@ -1,5 +1,6 @@
 require "cases/helper"
 require 'models/developer'
+require 'models/computer'
 require 'models/project'
 require 'models/company'
 require 'models/customer'
@@ -78,9 +79,23 @@ class SubDeveloper < Developer
     :association_foreign_key => "developer_id"
 end
 
+class DeveloperWithSymbolClassName < Developer
+  has_and_belongs_to_many :projects, class_name: :ProjectWithSymbolsForKeys
+end
+
+class DeveloperWithExtendOption < Developer
+  module NamedExtension
+    def category
+      'sns'
+    end
+  end
+
+  has_and_belongs_to_many :projects, extend: NamedExtension
+end
+
 class HasAndBelongsToManyAssociationsTest < ActiveRecord::TestCase
   fixtures :accounts, :companies, :categories, :posts, :categories_posts, :developers, :projects, :developers_projects,
-           :parrots, :pirates, :parrots_pirates, :treasures, :price_estimates, :tags, :taggings
+           :parrots, :pirates, :parrots_pirates, :treasures, :price_estimates, :tags, :taggings, :computers
 
   def setup_data_for_habtm_case
     ActiveRecord::Base.connection.execute('delete from countries_treaties')
@@ -229,7 +244,7 @@ class HasAndBelongsToManyAssociationsTest < ActiveRecord::TestCase
     assert_equal developers, new_project.developers
   end
 
-  def test_habtm_unique_order_preserved
+  def test_habtm_distinct_order_preserved
     assert_equal developers(:poor_jamis, :jamis, :david), projects(:active_record).non_unique_developers
     assert_equal developers(:poor_jamis, :jamis, :david), projects(:active_record).developers
   end
@@ -334,7 +349,7 @@ class HasAndBelongsToManyAssociationsTest < ActiveRecord::TestCase
     assert_equal  'Yet Another Testing Title', another_post.title
   end
 
-  def test_uniq_after_the_fact
+  def test_distinct_after_the_fact
     dev = developers(:jamis)
     dev.projects << projects(:active_record)
     dev.projects << projects(:active_record)
@@ -343,13 +358,13 @@ class HasAndBelongsToManyAssociationsTest < ActiveRecord::TestCase
     assert_equal 1, dev.projects.distinct.size
   end
 
-  def test_uniq_before_the_fact
+  def test_distinct_before_the_fact
     projects(:active_record).developers << developers(:jamis)
     projects(:active_record).developers << developers(:david)
     assert_equal 3, projects(:active_record, :reload).developers.size
   end
 
-  def test_uniq_option_prevents_duplicate_push
+  def test_distinct_option_prevents_duplicate_push
     project = projects(:active_record)
     project.developers << developers(:jamis)
     project.developers << developers(:david)
@@ -360,7 +375,7 @@ class HasAndBelongsToManyAssociationsTest < ActiveRecord::TestCase
     assert_equal 3, project.developers.size
   end
 
-  def test_uniq_when_association_already_loaded
+  def test_distinct_when_association_already_loaded
     project = projects(:active_record)
     project.developers << [ developers(:jamis), developers(:david), developers(:jamis), developers(:david) ]
     assert_equal 3, Project.includes(:developers).find(project.id).developers.size
@@ -550,7 +565,7 @@ class HasAndBelongsToManyAssociationsTest < ActiveRecord::TestCase
 
   def test_dynamic_find_all_should_respect_readonly_access
     projects(:active_record).readonly_developers.each { |d| assert_raise(ActiveRecord::ReadOnlyRecord) { d.save!  } if d.valid?}
-    projects(:active_record).readonly_developers.each { |d| d.readonly? }
+    projects(:active_record).readonly_developers.each(&:readonly?)
   end
 
   def test_new_with_values_in_collection
@@ -570,6 +585,11 @@ class HasAndBelongsToManyAssociationsTest < ActiveRecord::TestCase
     assert_equal 3, developers.size
 
     assert_equal developers(:poor_jamis), projects(:active_record).developers.where("salary < 10000").first
+  end
+
+  def test_association_with_extend_option
+    eponine = DeveloperWithExtendOption.create(name: 'Eponine')
+    assert_equal 'sns', eponine.projects.category
   end
 
   def test_replace_with_less
@@ -882,5 +902,19 @@ class HasAndBelongsToManyAssociationsTest < ActiveRecord::TestCase
     child = SubDeveloper.new("name" => "Aredridel")
     child.special_projects << SpecialProject.new("name" => "Special Project")
     assert child.save, 'child object should be saved'
+  end
+
+  def test_habtm_with_reflection_using_class_name_and_fixtures
+    assert_not_nil Developer._reflections['shared_computers']
+    # Checking the fixture for named association is important here, because it's the only way
+    # we've been able to reproduce this bug
+    assert_not_nil File.read(File.expand_path("../../../fixtures/developers.yml", __FILE__)).index("shared_computers")
+    assert_equal developers(:david).shared_computers.first, computers(:laptop)
+  end
+
+  def test_with_symbol_class_name
+    assert_nothing_raised NoMethodError do
+      DeveloperWithSymbolClassName.new
+    end
   end
 end

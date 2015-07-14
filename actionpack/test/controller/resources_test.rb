@@ -43,11 +43,11 @@ class ResourcesTest < ActionController::TestCase
           :member => member_methods,
           :path_names => path_names do |options|
 
-        collection_methods.keys.each do |action|
+        collection_methods.each_key do |action|
           assert_named_route "/messages/#{path_names[action] || action}", "#{action}_messages_path", :action => action
         end
 
-        member_methods.keys.each do |action|
+        member_methods.each_key do |action|
           assert_named_route "/messages/1/#{path_names[action] || action}", "#{action}_message_path", :action => action, :id => "1"
         end
 
@@ -150,7 +150,7 @@ class ResourcesTest < ActionController::TestCase
       end
 
       assert_restful_named_routes_for :messages do |options|
-        actions.keys.each do |action|
+        actions.each_key do |action|
           assert_named_route "/messages/#{action}", "#{action}_messages_path", :action => action
         end
       end
@@ -180,7 +180,7 @@ class ResourcesTest < ActionController::TestCase
       end
 
       assert_restful_named_routes_for :messages, :path_prefix => 'threads/1/', :name_prefix => 'thread_', :options => { :thread_id => '1' } do |options|
-        actions.keys.each do |action|
+        actions.each_key do |action|
           assert_named_route "/threads/1/messages/#{action}", "#{action}_thread_messages_path", :action => action
         end
       end
@@ -207,7 +207,7 @@ class ResourcesTest < ActionController::TestCase
       end
 
       assert_restful_named_routes_for :messages, :path_prefix => 'threads/1/', :name_prefix => 'thread_', :options => { :thread_id => '1' } do |options|
-        actions.keys.each do |action|
+        actions.each_key do |action|
           assert_named_route "/threads/1/messages/#{action}", "#{action}_thread_messages_path", :action => action
         end
       end
@@ -237,7 +237,7 @@ class ResourcesTest < ActionController::TestCase
       end
 
       assert_restful_named_routes_for :messages, :path_prefix => 'threads/1/', :name_prefix => 'thread_', :options => { :thread_id => '1' } do |options|
-        actions.keys.each do |action|
+        actions.each_key do |action|
           assert_named_route "/threads/1/messages/#{action}.xml", "#{action}_thread_messages_path", :action => action, :format => 'xml'
         end
       end
@@ -1047,6 +1047,28 @@ class ResourcesTest < ActionController::TestCase
     end
   end
 
+  def test_assert_routing_accepts_all_as_a_valid_method
+    with_routing do |set|
+      set.draw do
+        match "/products", to: "products#show", via: :all
+      end
+
+      assert_routing({ method: "all", path: "/products" }, { controller: "products", action: "show" })
+    end
+  end
+
+  def test_assert_routing_fails_when_not_all_http_methods_are_recognized
+    with_routing do |set|
+      set.draw do
+        match "/products", to: "products#show", via: [:get, :post, :put]
+      end
+
+      assert_raises(Minitest::Assertion) do
+        assert_routing({ method: "all", path: "/products" }, { controller: "products", action: "show" })
+      end
+    end
+  end
+
   def test_singleton_resource_name_is_not_singularized
     with_singleton_resources(:preferences) do
       assert_singleton_restful_for :preferences
@@ -1184,10 +1206,8 @@ class ResourcesTest < ActionController::TestCase
       end
 
       @controller = "#{options[:options][:controller].camelize}Controller".constantize.new
-      @controller.singleton_class.send(:include, @routes.url_helpers)
-      @request    = ActionController::TestRequest.new
-      @response   = ActionController::TestResponse.new
-      get :index, options[:options]
+      @controller.singleton_class.include(@routes.url_helpers)
+      get :index, params: options[:options]
       options[:options].delete :action
 
       path = "#{options[:as] || controller_name}"
@@ -1254,10 +1274,8 @@ class ResourcesTest < ActionController::TestCase
     def assert_singleton_named_routes_for(singleton_name, options = {})
       (options[:options] ||= {})[:controller] ||= singleton_name.to_s.pluralize
       @controller = "#{options[:options][:controller].camelize}Controller".constantize.new
-      @controller.singleton_class.send(:include, @routes.url_helpers)
-      @request    = ActionController::TestRequest.new
-      @response   = ActionController::TestResponse.new
-      get :show, options[:options]
+      @controller.singleton_class.include(@routes.url_helpers)
+      get :show, params: options[:options]
       options[:options].delete :action
 
       full_path = "/#{options[:path_prefix]}#{options[:as] || singleton_name}"

@@ -30,7 +30,6 @@ class DurationTest < ActiveSupport::TestCase
     assert ActiveSupport::Duration === 1.day
     assert !(ActiveSupport::Duration === 1.day.to_i)
     assert !(ActiveSupport::Duration === 'foo')
-    assert !(ActiveSupport::Duration === ActiveSupport::ProxyObject.new)
   end
 
   def test_equals
@@ -40,14 +39,22 @@ class DurationTest < ActiveSupport::TestCase
     assert !(1.day == 'foo')
   end
 
+  def test_to_s
+    assert_equal "1", 1.second.to_s
+  end
+
   def test_eql
     rubinius_skip "Rubinius' #eql? definition relies on #instance_of? " \
                   "which behaves oddly for the sake of backward-compatibility."
 
     assert 1.minute.eql?(1.minute)
+    assert 1.minute.eql?(60.seconds)
     assert 2.days.eql?(48.hours)
     assert !1.second.eql?(1)
     assert !1.eql?(1.second)
+    assert 1.minute.eql?(180.seconds - 2.minutes)
+    assert !1.minute.eql?(60)
+    assert !1.minute.eql?('foo')
   end
 
   def test_inspect
@@ -61,6 +68,15 @@ class DurationTest < ActiveSupport::TestCase
     assert_equal '10 years, 2 months, and 1 day',   (1.day + 10.years + 2.months).inspect
     assert_equal '7 days',                          1.week.inspect
     assert_equal '14 days',                         1.fortnight.inspect
+  end
+
+  def test_inspect_locale
+    current_locale = I18n.default_locale
+    I18n.default_locale = :de
+    I18n.backend.store_translations(:de, { support: { array: { last_word_connector: ' und ' } } })
+    assert_equal '10 years, 1 month und 1 day', (10.years + 1.month  + 1.day).inspect
+  ensure
+    I18n.default_locale = current_locale
   end
 
   def test_minus_with_duration_does_not_break_subtraction_of_date_from_date
@@ -90,8 +106,8 @@ class DurationTest < ActiveSupport::TestCase
 
   def test_since_and_ago
     t = Time.local(2000)
-    assert t + 1, 1.second.since(t)
-    assert t - 1, 1.second.ago(t)
+    assert_equal t + 1, 1.second.since(t)
+    assert_equal t - 1, 1.second.ago(t)
   end
 
   def test_since_and_ago_without_argument
@@ -124,28 +140,30 @@ class DurationTest < ActiveSupport::TestCase
   def test_since_and_ago_anchored_to_time_now_when_time_zone_is_not_set
     Time.zone = nil
     with_env_tz 'US/Eastern' do
-      Time.stubs(:now).returns Time.local(2000)
-      # since
-      assert_not_instance_of ActiveSupport::TimeWithZone, 5.seconds.since
-      assert_equal Time.local(2000,1,1,0,0,5), 5.seconds.since
-      # ago
-      assert_not_instance_of ActiveSupport::TimeWithZone, 5.seconds.ago
-      assert_equal Time.local(1999,12,31,23,59,55), 5.seconds.ago
+      Time.stub(:now, Time.local(2000)) do
+        # since
+        assert_not_instance_of ActiveSupport::TimeWithZone, 5.seconds.since
+        assert_equal Time.local(2000,1,1,0,0,5), 5.seconds.since
+        # ago
+        assert_not_instance_of ActiveSupport::TimeWithZone, 5.seconds.ago
+        assert_equal Time.local(1999,12,31,23,59,55), 5.seconds.ago
+      end
     end
   end
 
   def test_since_and_ago_anchored_to_time_zone_now_when_time_zone_is_set
     Time.zone = ActiveSupport::TimeZone['Eastern Time (US & Canada)']
     with_env_tz 'US/Eastern' do
-      Time.stubs(:now).returns Time.local(2000)
-      # since
-      assert_instance_of ActiveSupport::TimeWithZone, 5.seconds.since
-      assert_equal Time.utc(2000,1,1,0,0,5), 5.seconds.since.time
-      assert_equal 'Eastern Time (US & Canada)', 5.seconds.since.time_zone.name
-      # ago
-      assert_instance_of ActiveSupport::TimeWithZone, 5.seconds.ago
-      assert_equal Time.utc(1999,12,31,23,59,55), 5.seconds.ago.time
-      assert_equal 'Eastern Time (US & Canada)', 5.seconds.ago.time_zone.name
+      Time.stub(:now, Time.local(2000)) do
+        # since
+        assert_instance_of ActiveSupport::TimeWithZone, 5.seconds.since
+        assert_equal Time.utc(2000,1,1,0,0,5), 5.seconds.since.time
+        assert_equal 'Eastern Time (US & Canada)', 5.seconds.since.time_zone.name
+        # ago
+        assert_instance_of ActiveSupport::TimeWithZone, 5.seconds.ago
+        assert_equal Time.utc(1999,12,31,23,59,55), 5.seconds.ago.time
+        assert_equal 'Eastern Time (US & Canada)', 5.seconds.ago.time_zone.name
+      end
     end
   ensure
     Time.zone = nil
@@ -182,5 +200,26 @@ class DurationTest < ActiveSupport::TestCase
   def test_case_when
     cased = case 1.day when 1.day then "ok" end
     assert_equal cased, "ok"
+  end
+
+  def test_respond_to
+    assert_respond_to 1.day, :since
+    assert_respond_to 1.day, :zero?
+  end
+
+  def test_hash
+    assert_equal 1.minute.hash, 60.seconds.hash
+  end
+
+  def test_comparable
+    assert_equal(-1, (0.seconds <=> 1.second))
+    assert_equal(-1, (1.second <=> 1.minute))
+    assert_equal(-1, (1 <=> 1.minute))
+    assert_equal(0, (0.seconds <=> 0.seconds))
+    assert_equal(0, (0.seconds <=> 0.minutes))
+    assert_equal(0, (1.second <=> 1.second))
+    assert_equal(1, (1.second <=> 0.second))
+    assert_equal(1, (1.minute <=> 1.second))
+    assert_equal(1, (61 <=> 1.minute))
   end
 end

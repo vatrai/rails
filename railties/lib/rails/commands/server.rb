@@ -24,18 +24,10 @@ module Rails
           opts.on("-p", "--port=port", Integer,
                   "Runs Rails on the specified port.", "Default: 3000") { |v| options[:Port] = v }
           opts.on("-b", "--binding=IP", String,
-                  "Binds Rails to the specified IP.", "Default: 0.0.0.0") { |v| options[:Host] = v }
+                  "Binds Rails to the specified IP.", "Default: localhost") { |v| options[:Host] = v }
           opts.on("-c", "--config=file", String,
                   "Uses a custom rackup configuration.") { |v| options[:config] = v }
           opts.on("-d", "--daemon", "Runs server as a Daemon.") { options[:daemonize] = true }
-          opts.on("-u", "--debugger", "Enables the debugger.") do
-            if RUBY_VERSION < '2.0.0'
-              options[:debugger] = true
-            else
-              puts "=> Notice: debugger option is ignored since Ruby 2.0 and " \
-                   "it will be removed in future versions."
-            end
-          end
           opts.on("-e", "--environment=name", String,
                   "Specifies the environment to run this server under (test/development/production).",
                   "Default: development") { |v| options[:environment] = v }
@@ -85,25 +77,7 @@ module Rails
     end
 
     def middleware
-      middlewares = []
-      if RUBY_VERSION < '2.0.0'
-        middlewares << [Rails::Rack::Debugger] if options[:debugger]
-      end
-      middlewares << [::Rack::ContentLength]
-
-      # FIXME: add Rack::Lock in the case people are using webrick.
-      # This is to remain backwards compatible for those who are
-      # running webrick in production. We should consider removing this
-      # in development.
-      if server.name == 'Rack::Handler::WEBrick'
-        middlewares << [::Rack::Lock]
-      end
-
-      Hash.new(middlewares)
-    end
-
-    def log_path
-      "log/#{options[:environment]}.log"
+      Hash.new([])
     end
 
     def default_options
@@ -112,9 +86,7 @@ module Rails
         DoNotReverseLookup: true,
         environment:        (ENV['RAILS_ENV'] || ENV['RACK_ENV'] || "development").dup,
         daemonize:          false,
-        debugger:           false,
-        pid:                File.expand_path("tmp/pids/server.pid"),
-        config:             File.expand_path("config.ru")
+        pid:                File.expand_path("tmp/pids/server.pid")
       })
     end
 
@@ -126,15 +98,11 @@ module Rails
         puts "=> Rails #{Rails.version} application starting in #{Rails.env} on #{url}"
         puts "=> Run `rails server -h` for more startup options"
 
-        if options[:Host].to_s.match(/0\.0\.0\.0/)
-          puts "=> Notice: server is listening on all interfaces (#{options[:Host]}). Consider using 127.0.0.1 (--binding option)"
-        end
-
         puts "=> Ctrl-C to shutdown server" unless options[:daemonize]
       end
 
       def create_tmp_directories
-        %w(cache pids sessions sockets).each do |dir_to_make|
+        %w(cache pids sockets).each do |dir_to_make|
           FileUtils.mkdir_p(File.join(Rails.root, 'tmp', dir_to_make))
         end
       end

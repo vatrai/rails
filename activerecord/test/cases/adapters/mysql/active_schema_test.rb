@@ -1,7 +1,7 @@
 require "cases/helper"
 require 'support/connection_helper'
 
-class ActiveSchemaTest < ActiveRecord::TestCase
+class MysqlActiveSchemaTest < ActiveRecord::MysqlTestCase
   include ConnectionHelper
 
   def setup
@@ -59,6 +59,43 @@ class ActiveSchemaTest < ActiveRecord::TestCase
     assert_equal expected, add_index(:people, [:last_name, :first_name], :length => 15, :using => :btree)
   end
 
+  def test_index_in_create
+    def (ActiveRecord::Base.connection).table_exists?(*); false; end
+
+    %w(SPATIAL FULLTEXT UNIQUE).each do |type|
+      expected = "CREATE TABLE `people` (#{type} INDEX `index_people_on_last_name`  (`last_name`) ) ENGINE=InnoDB"
+      actual = ActiveRecord::Base.connection.create_table(:people, id: false) do |t|
+        t.index :last_name, type: type
+      end
+      assert_equal expected, actual
+    end
+
+    expected = "CREATE TABLE `people` ( INDEX `index_people_on_last_name` USING btree (`last_name`(10)) ) ENGINE=InnoDB"
+    actual = ActiveRecord::Base.connection.create_table(:people, id: false) do |t|
+      t.index :last_name, length: 10, using: :btree
+    end
+    assert_equal expected, actual
+  end
+
+  def test_index_in_bulk_change
+    def (ActiveRecord::Base.connection).table_exists?(*); true; end
+    def (ActiveRecord::Base.connection).index_name_exists?(*); false; end
+
+    %w(SPATIAL FULLTEXT UNIQUE).each do |type|
+      expected = "ALTER TABLE `people` ADD #{type} INDEX `index_people_on_last_name`  (`last_name`)"
+      actual = ActiveRecord::Base.connection.change_table(:people, bulk: true) do |t|
+        t.index :last_name, type: type
+      end
+      assert_equal expected, actual
+    end
+
+    expected = "ALTER TABLE `peaple` ADD  INDEX `index_peaple_on_last_name` USING btree (`last_name`(10)), ALGORITHM = COPY"
+    actual = ActiveRecord::Base.connection.change_table(:peaple, bulk: true) do |t|
+      t.index :last_name, length: 10, using: :btree, algorithm: :copy
+    end
+    assert_equal expected, actual
+  end
+
   def test_drop_table
     assert_equal "DROP TABLE `people`", drop_table(:people)
   end
@@ -92,7 +129,7 @@ class ActiveSchemaTest < ActiveRecord::TestCase
     with_real_execute do
       begin
         ActiveRecord::Base.connection.create_table :delete_me
-        ActiveRecord::Base.connection.add_timestamps :delete_me
+        ActiveRecord::Base.connection.add_timestamps :delete_me, null: true
         assert column_present?('delete_me', 'updated_at', 'datetime')
         assert column_present?('delete_me', 'created_at', 'datetime')
       ensure
@@ -107,7 +144,7 @@ class ActiveSchemaTest < ActiveRecord::TestCase
         ActiveRecord::Base.connection.create_table :delete_me do |t|
           t.timestamps null: true
         end
-        ActiveRecord::Base.connection.remove_timestamps :delete_me
+        ActiveRecord::Base.connection.remove_timestamps :delete_me, { null: true }
         assert !column_present?('delete_me', 'updated_at', 'datetime')
         assert !column_present?('delete_me', 'created_at', 'datetime')
       ensure

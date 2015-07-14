@@ -1,4 +1,4 @@
-# encoding: utf-8
+# -*- coding: utf-8 -*-
 
 require "cases/helper"
 require 'active_support/concurrency/latch'
@@ -10,6 +10,7 @@ require 'models/category'
 require 'models/company'
 require 'models/customer'
 require 'models/developer'
+require 'models/computer'
 require 'models/project'
 require 'models/default'
 require 'models/auto_id'
@@ -87,6 +88,7 @@ class BasicsTest < ActiveRecord::TestCase
       'Mysql2Adapter'     => '`',
       'PostgreSQLAdapter' => '"',
       'OracleAdapter'     => '"',
+      'FbAdapter'         => '"'
     }.fetch(classname) {
       raise "need a bad char for #{classname}"
     }
@@ -110,7 +112,7 @@ class BasicsTest < ActiveRecord::TestCase
     assert_nil Edge.primary_key
   end
 
-  unless current_adapter?(:PostgreSQLAdapter, :OracleAdapter, :SQLServerAdapter)
+  unless current_adapter?(:PostgreSQLAdapter, :OracleAdapter, :SQLServerAdapter, :FbAdapter)
     def test_limit_with_comma
       assert Topic.limit("1,2").to_a
     end
@@ -522,6 +524,10 @@ class BasicsTest < ActiveRecord::TestCase
     assert_equal Topic.find(['1-meowmeow', '2-hello']), Topic.find([1, 2])
   end
 
+  def test_find_by_slug_with_range
+    assert_equal Topic.where(id: '1-meowmeow'..'2-hello'), Topic.where(id: 1..2)
+  end
+
   def test_equality_of_new_records
     assert_not_equal Topic.new, Topic.new
     assert_equal false, Topic.new == Topic.new
@@ -807,7 +813,6 @@ class BasicsTest < ActiveRecord::TestCase
   def test_dup_does_not_copy_associations
     author = authors(:david)
     assert_not_equal [], author.posts
-    author.send(:clear_association_cache)
 
     author_dup = author.dup
     assert_equal [], author_dup.posts
@@ -893,101 +898,13 @@ class BasicsTest < ActiveRecord::TestCase
         assert_equal 'a text field', default.char3
       end
     end
-
-    class Geometric < ActiveRecord::Base; end
-    def test_geometric_content
-
-      # accepted format notes:
-      # ()'s aren't required
-      # values can be a mix of float or integer
-
-      g = Geometric.new(
-        :a_point        => '(5.0, 6.1)',
-        #:a_line         => '((2.0, 3), (5.5, 7.0))' # line type is currently unsupported in postgresql
-        :a_line_segment => '(2.0, 3), (5.5, 7.0)',
-        :a_box          => '2.0, 3, 5.5, 7.0',
-        :a_path         => '[(2.0, 3), (5.5, 7.0), (8.5, 11.0)]',  # [ ] is an open path
-        :a_polygon      => '((2.0, 3), (5.5, 7.0), (8.5, 11.0))',
-        :a_circle       => '<(5.3, 10.4), 2>'
-      )
-
-      assert g.save
-
-      # Reload and check that we have all the geometric attributes.
-      h = Geometric.find(g.id)
-
-      assert_equal [5.0, 6.1], h.a_point
-      assert_equal '[(2,3),(5.5,7)]', h.a_line_segment
-      assert_equal '(5.5,7),(2,3)', h.a_box   # reordered to store upper right corner then bottom left corner
-      assert_equal '[(2,3),(5.5,7),(8.5,11)]', h.a_path
-      assert_equal '((2,3),(5.5,7),(8.5,11))', h.a_polygon
-      assert_equal '<(5.3,10.4),2>', h.a_circle
-
-      # use a geometric function to test for an open path
-      objs = Geometric.find_by_sql ["select isopen(a_path) from geometrics where id = ?", g.id]
-
-      assert_equal true, objs[0].isopen
-
-      # test alternate formats when defining the geometric types
-
-      g = Geometric.new(
-        :a_point        => '5.0, 6.1',
-        #:a_line         => '((2.0, 3), (5.5, 7.0))' # line type is currently unsupported in postgresql
-        :a_line_segment => '((2.0, 3), (5.5, 7.0))',
-        :a_box          => '(2.0, 3), (5.5, 7.0)',
-        :a_path         => '((2.0, 3), (5.5, 7.0), (8.5, 11.0))',  # ( ) is a closed path
-        :a_polygon      => '2.0, 3, 5.5, 7.0, 8.5, 11.0',
-        :a_circle       => '((5.3, 10.4), 2)'
-      )
-
-      assert g.save
-
-      # Reload and check that we have all the geometric attributes.
-      h = Geometric.find(g.id)
-
-      assert_equal [5.0, 6.1], h.a_point
-      assert_equal '[(2,3),(5.5,7)]', h.a_line_segment
-      assert_equal '(5.5,7),(2,3)', h.a_box   # reordered to store upper right corner then bottom left corner
-      assert_equal '((2,3),(5.5,7),(8.5,11))', h.a_path
-      assert_equal '((2,3),(5.5,7),(8.5,11))', h.a_polygon
-      assert_equal '<(5.3,10.4),2>', h.a_circle
-
-      # use a geometric function to test for an closed path
-      objs = Geometric.find_by_sql ["select isclosed(a_path) from geometrics where id = ?", g.id]
-
-      assert_equal true, objs[0].isclosed
-
-      # test native ruby formats when defining the geometric types
-      g = Geometric.new(
-        :a_point        => [5.0, 6.1],
-        #:a_line         => '((2.0, 3), (5.5, 7.0))' # line type is currently unsupported in postgresql
-        :a_line_segment => '((2.0, 3), (5.5, 7.0))',
-        :a_box          => '(2.0, 3), (5.5, 7.0)',
-        :a_path         => '((2.0, 3), (5.5, 7.0), (8.5, 11.0))',  # ( ) is a closed path
-        :a_polygon      => '2.0, 3, 5.5, 7.0, 8.5, 11.0',
-        :a_circle       => '((5.3, 10.4), 2)'
-      )
-
-      assert g.save
-
-      # Reload and check that we have all the geometric attributes.
-      h = Geometric.find(g.id)
-
-      assert_equal [5.0, 6.1], h.a_point
-      assert_equal '[(2,3),(5.5,7)]', h.a_line_segment
-      assert_equal '(5.5,7),(2,3)', h.a_box   # reordered to store upper right corner then bottom left corner
-      assert_equal '((2,3),(5.5,7),(8.5,11))', h.a_path
-      assert_equal '((2,3),(5.5,7),(8.5,11))', h.a_polygon
-      assert_equal '<(5.3,10.4),2>', h.a_circle
-    end
   end
 
   class NumericData < ActiveRecord::Base
     self.table_name = 'numeric_data'
 
-    attribute :world_population, Type::Integer.new
-    attribute :my_house_population, Type::Integer.new
-    attribute :atoms_in_universe, Type::Integer.new
+    attribute :my_house_population, :integer
+    attribute :atoms_in_universe, :integer
   end
 
   def test_big_decimal_conditions
@@ -1092,54 +1009,61 @@ class BasicsTest < ActiveRecord::TestCase
   end
 
   def test_switching_between_table_name
-    assert_difference("GoodJoke.count") do
-      Joke.table_name = "cold_jokes"
-      Joke.create
+    k = Class.new(Joke)
 
-      Joke.table_name = "funny_jokes"
-      Joke.create
+    assert_difference("GoodJoke.count") do
+      k.table_name = "cold_jokes"
+      k.create
+
+      k.table_name = "funny_jokes"
+      k.create
     end
   end
 
   def test_clear_cash_when_setting_table_name
-    Joke.table_name = "cold_jokes"
-    before_columns = Joke.columns
-    before_seq     = Joke.sequence_name
+    original_table_name = Joke.table_name
 
     Joke.table_name = "funny_jokes"
+    before_columns = Joke.columns
+    before_seq = Joke.sequence_name
+
+    Joke.table_name = "cold_jokes"
     after_columns = Joke.columns
-    after_seq     = Joke.sequence_name
+    after_seq = Joke.sequence_name
 
     assert_not_equal before_columns, after_columns
     assert_not_equal before_seq, after_seq unless before_seq.nil? && after_seq.nil?
+  ensure
+    Joke.table_name = original_table_name
   end
 
   def test_dont_clear_sequence_name_when_setting_explicitly
-    Joke.sequence_name = "black_jokes_seq"
-    Joke.table_name    = "cold_jokes"
-    before_seq         = Joke.sequence_name
+    k = Class.new(Joke)
+    k.sequence_name = "black_jokes_seq"
+    k.table_name = "cold_jokes"
+    before_seq = k.sequence_name
 
-    Joke.table_name    = "funny_jokes"
-    after_seq          = Joke.sequence_name
+    k.table_name = "funny_jokes"
+    after_seq = k.sequence_name
 
     assert_equal before_seq, after_seq unless before_seq.nil? && after_seq.nil?
-  ensure
-    Joke.reset_sequence_name
   end
 
   def test_dont_clear_inheritance_column_when_setting_explicitly
-    Joke.inheritance_column = "my_type"
-    before_inherit = Joke.inheritance_column
+    k = Class.new(Joke)
+    k.inheritance_column = "my_type"
+    before_inherit = k.inheritance_column
 
-    Joke.reset_column_information
-    after_inherit = Joke.inheritance_column
+    k.reset_column_information
+    after_inherit = k.inheritance_column
 
     assert_equal before_inherit, after_inherit unless before_inherit.blank? && after_inherit.blank?
   end
 
   def test_set_table_name_symbol_converted_to_string
-    Joke.table_name = :cold_jokes
-    assert_equal 'cold_jokes', Joke.table_name
+    k = Class.new(Joke)
+    k.table_name = :cold_jokes
+    assert_equal 'cold_jokes', k.table_name
   end
 
   def test_quoted_table_name_after_set_table_name
@@ -1383,7 +1307,10 @@ class BasicsTest < ActiveRecord::TestCase
     c1 = Post.connection.schema_cache.columns('posts')
     ActiveRecord::Base.clear_cache!
     c2 = Post.connection.schema_cache.columns('posts')
-    assert_not_equal c1, c2
+    c1.each_with_index do |v, i|
+      assert_not_same v, c2[i]
+    end
+    assert_equal c1, c2
   end
 
   def test_current_scope_is_reset
@@ -1484,15 +1411,13 @@ class BasicsTest < ActiveRecord::TestCase
   end
 
   def test_uniq_delegates_to_scoped
-    scope = stub
-    Bird.stubs(:all).returns(mock(:uniq => scope))
-    assert_equal scope, Bird.uniq
+    assert_deprecated do
+      assert_equal Bird.all.distinct, Bird.uniq
+    end
   end
 
   def test_distinct_delegates_to_scoped
-    scope = stub
-    Bird.stubs(:all).returns(mock(:distinct => scope))
-    assert_equal scope, Bird.distinct
+    assert_equal Bird.all.distinct, Bird.distinct
   end
 
   def test_table_name_with_2_abstract_subclasses
@@ -1507,7 +1432,7 @@ class BasicsTest < ActiveRecord::TestCase
     attrs.delete 'id'
 
     typecast = Class.new(ActiveRecord::Type::Value) {
-      def type_cast value
+      def cast value
         "t.lo"
       end
     }
@@ -1606,5 +1531,15 @@ class BasicsTest < ActiveRecord::TestCase
   # delete this.
   test "records without an id have unique hashes" do
     assert_not_equal Post.new.hash, Post.new.hash
+  end
+
+  test "resetting column information doesn't remove attribute methods" do
+    topic = topics(:first)
+
+    assert_not topic.id_changed?
+
+    Topic.reset_column_information
+
+    assert_not topic.id_changed?
   end
 end

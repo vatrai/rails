@@ -15,6 +15,7 @@ require 'models/essay'
 require 'models/owner'
 require 'models/post'
 require 'models/comment'
+require 'models/categorization'
 
 class HasOneThroughAssociationsTest < ActiveRecord::TestCase
   fixtures :member_types, :members, :clubs, :memberships, :sponsors, :organizations, :minivans,
@@ -286,6 +287,12 @@ class HasOneThroughAssociationsTest < ActiveRecord::TestCase
   def test_has_one_through_many_raises_exception
     assert_raise(ActiveRecord::HasOneThroughCantAssociateThroughCollection) do
       members(:groucho).club_through_many
+    end
+  end
+
+  def test_has_one_through_polymorphic_association
+    assert_raise(ActiveRecord::HasOneAssociationPolymorphicThroughError) do
+      @member.premium_club
     end
   end
 

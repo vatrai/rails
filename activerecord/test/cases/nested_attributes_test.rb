@@ -13,7 +13,7 @@ require 'active_support/hash_with_indifferent_access'
 
 class TestNestedAttributesInGeneral < ActiveRecord::TestCase
   teardown do
-    Pirate.accepts_nested_attributes_for :ship, :allow_destroy => true, :reject_if => proc { |attributes| attributes.empty? }
+    Pirate.accepts_nested_attributes_for :ship, :allow_destroy => true, :reject_if => proc(&:empty?)
   end
 
   def test_base_should_have_an_empty_nested_attributes_options
@@ -300,13 +300,13 @@ class TestNestedAttributesOnAHasOneAssociation < ActiveRecord::TestCase
   end
 
   def test_should_not_destroy_an_existing_record_if_allow_destroy_is_false
-    Pirate.accepts_nested_attributes_for :ship, :allow_destroy => false, :reject_if => proc { |attributes| attributes.empty? }
+    Pirate.accepts_nested_attributes_for :ship, :allow_destroy => false, :reject_if => proc(&:empty?)
 
     @pirate.update(ship_attributes: { id: @pirate.ship.id, _destroy: '1' })
 
     assert_equal @ship, @pirate.reload.ship
 
-    Pirate.accepts_nested_attributes_for :ship, :allow_destroy => true, :reject_if => proc { |attributes| attributes.empty? }
+    Pirate.accepts_nested_attributes_for :ship, :allow_destroy => true, :reject_if => proc(&:empty?)
   end
 
   def test_should_also_work_with_a_HashWithIndifferentAccess
@@ -494,12 +494,12 @@ class TestNestedAttributesOnABelongsToAssociation < ActiveRecord::TestCase
   end
 
   def test_should_not_destroy_an_existing_record_if_allow_destroy_is_false
-    Ship.accepts_nested_attributes_for :pirate, :allow_destroy => false, :reject_if => proc { |attributes| attributes.empty? }
+    Ship.accepts_nested_attributes_for :pirate, :allow_destroy => false, :reject_if => proc(&:empty?)
 
     @ship.update(pirate_attributes: { id: @ship.pirate.id, _destroy: '1' })
     assert_nothing_raised(ActiveRecord::RecordNotFound) { @ship.pirate.reload }
   ensure
-    Ship.accepts_nested_attributes_for :pirate, :allow_destroy => true, :reject_if => proc { |attributes| attributes.empty? }
+    Ship.accepts_nested_attributes_for :pirate, :allow_destroy => true, :reject_if => proc(&:empty?)
   end
 
   def test_should_work_with_update_as_well
@@ -656,6 +656,16 @@ module NestedAttributesOnACollectionAssociationTests
       @pirate.attributes = { association_getter => [{ :id => 1234567890 }] }
     end
     assert_equal "Couldn't find #{@child_1.class.name} with ID=1234567890 for Pirate with ID=#{@pirate.id}", exception.message
+  end
+
+  def test_should_raise_RecordNotFound_if_an_id_belonging_to_a_different_record_is_given
+    other_pirate = Pirate.create! catchphrase: 'Ahoy!'
+    other_child = other_pirate.send(@association_name).create! name: 'Buccaneers Servant'
+
+    exception = assert_raise ActiveRecord::RecordNotFound do
+      @pirate.attributes = { association_getter => [{ id: other_child.id }] }
+    end
+    assert_equal "Couldn't find #{@child_1.class.name} with ID=#{other_child.id} for Pirate with ID=#{@pirate.id}", exception.message
   end
 
   def test_should_automatically_build_new_associated_models_for_each_entry_in_a_hash_where_the_id_is_missing
@@ -855,7 +865,7 @@ end
 
 module NestedAttributesLimitTests
   def teardown
-    Pirate.accepts_nested_attributes_for :parrots, :allow_destroy => true, :reject_if => proc { |attributes| attributes.empty? }
+    Pirate.accepts_nested_attributes_for :parrots, :allow_destroy => true, :reject_if => proc(&:empty?)
   end
 
   def test_limit_with_less_records
@@ -943,7 +953,7 @@ class TestNestedAttributesWithNonStandardPrimaryKeys < ActiveRecord::TestCase
 end
 
 class TestHasOneAutosaveAssociationWhichItselfHasAutosaveAssociations < ActiveRecord::TestCase
-  self.use_transactional_fixtures = false unless supports_savepoints?
+  self.use_transactional_tests = false unless supports_savepoints?
 
   def setup
     @pirate = Pirate.create!(:catchphrase => "My baby takes tha mornin' train!")
@@ -983,7 +993,7 @@ class TestHasOneAutosaveAssociationWhichItselfHasAutosaveAssociations < ActiveRe
 end
 
 class TestHasManyAutosaveAssociationWhichItselfHasAutosaveAssociations < ActiveRecord::TestCase
-  self.use_transactional_fixtures = false unless supports_savepoints?
+  self.use_transactional_tests = false unless supports_savepoints?
 
   def setup
     @ship = Ship.create!(:name => "The good ship Dollypop")
@@ -1036,5 +1046,22 @@ class TestHasManyAutosaveAssociationWhichItselfHasAutosaveAssociations < ActiveR
     Ship.create!(:name => "The Black Rock")
     ShipPart.create!(:ship => @ship, :name => "Stern")
     assert_no_queries { @ship.valid? }
+  end
+
+  test "circular references do not perform unnecessary queries" do
+    ship = Ship.new(name: "The Black Rock")
+    part = ship.parts.build(name: "Stern")
+    ship.treasures.build(looter: part)
+
+    assert_queries 3 do
+      ship.save!
+    end
+  end
+
+  test "nested singular associations are validated" do
+    part = ShipPart.new(name: "Stern", ship_attributes: { name: nil })
+
+    assert_not part.valid?
+    assert_equal ["Ship name can't be blank"], part.errors.full_messages
   end
 end

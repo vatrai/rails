@@ -24,14 +24,14 @@ ActiveSupport::Deprecation.debug = true
 # Disable available locale checks to avoid warnings running the test suite.
 I18n.enforce_available_locales = false
 
-# Enable raise errors in after_commit and after_rollback.
-ActiveRecord::Base.raise_in_transactional_callbacks = true
-
 # Connect to the database
 ARTest.connect
 
 # Quote "type" if it's a reserved word for the current connection.
 QUOTED_TYPE = ActiveRecord::Base.connection.quote_column_name('type')
+
+# FIXME: Remove this when the deprecation cycle on TZ aware types by default ends.
+ActiveRecord::Base.time_zone_aware_types << :time
 
 def current_adapter?(*types)
   types.any? do |type|
@@ -46,8 +46,12 @@ def in_memory_db?
 end
 
 def mysql_56?
-  current_adapter?(:Mysql2Adapter) &&
+  current_adapter?(:MysqlAdapter, :Mysql2Adapter) &&
     ActiveRecord::Base.connection.send(:version).join(".") >= "5.6.0"
+end
+
+def mysql_enforcing_gtid_consistency?
+  current_adapter?(:MysqlAdapter, :Mysql2Adapter) && 'ON' == ActiveRecord::Base.connection.show_variable('enforce_gtid_consistency')
 end
 
 def supports_savepoints?
@@ -91,7 +95,7 @@ EXPECTED_TIME_ZONE_AWARE_ATTRIBUTES = false
 def verify_default_timezone_config
   if Time.zone != EXPECTED_ZONE
     $stderr.puts <<-MSG
-\n#{self.to_s}
+\n#{self}
     Global state `Time.zone` was leaked.
       Expected: #{EXPECTED_ZONE}
       Got: #{Time.zone}
@@ -99,7 +103,7 @@ def verify_default_timezone_config
   end
   if ActiveRecord::Base.default_timezone != EXPECTED_DEFAULT_TIMEZONE
     $stderr.puts <<-MSG
-\n#{self.to_s}
+\n#{self}
     Global state `ActiveRecord::Base.default_timezone` was leaked.
       Expected: #{EXPECTED_DEFAULT_TIMEZONE}
       Got: #{ActiveRecord::Base.default_timezone}
@@ -107,7 +111,7 @@ def verify_default_timezone_config
   end
   if ActiveRecord::Base.time_zone_aware_attributes != EXPECTED_TIME_ZONE_AWARE_ATTRIBUTES
     $stderr.puts <<-MSG
-\n#{self.to_s}
+\n#{self}
     Global state `ActiveRecord::Base.time_zone_aware_attributes` was leaked.
       Expected: #{EXPECTED_TIME_ZONE_AWARE_ATTRIBUTES}
       Got: #{ActiveRecord::Base.time_zone_aware_attributes}
@@ -115,26 +119,21 @@ def verify_default_timezone_config
   end
 end
 
-def enable_uuid_ossp!(connection)
+def enable_extension!(extension, connection)
   return false unless connection.supports_extensions?
-  return connection.reconnect! if connection.extension_enabled?('uuid-ossp')
+  return connection.reconnect! if connection.extension_enabled?(extension)
 
-  connection.enable_extension 'uuid-ossp'
-  connection.commit_db_transaction
+  connection.enable_extension extension
+  connection.commit_db_transaction if connection.transaction_open?
   connection.reconnect!
 end
 
-unless ENV['FIXTURE_DEBUG']
-  module ActiveRecord::TestFixtures::ClassMethods
-    def try_to_load_dependency_with_silence(*args)
-      old = ActiveRecord::Base.logger.level
-      ActiveRecord::Base.logger.level = ActiveSupport::Logger::ERROR
-      try_to_load_dependency_without_silence(*args)
-      ActiveRecord::Base.logger.level = old
-    end
+def disable_extension!(extension, connection)
+  return false unless connection.supports_extensions?
+  return true unless connection.extension_enabled?(extension)
 
-    alias_method_chain :try_to_load_dependency, :silence
-  end
+  connection.disable_extension extension
+  connection.reconnect!
 end
 
 require "cases/validations_repair_helper"
@@ -144,7 +143,7 @@ class ActiveSupport::TestCase
 
   self.fixture_path = FIXTURES_ROOT
   self.use_instantiated_fixtures  = false
-  self.use_transactional_fixtures = true
+  self.use_transactional_tests = true
 
   def create_fixtures(*fixture_set_names, &block)
     ActiveRecord::FixtureSet.create_fixtures(ActiveSupport::TestCase.fixture_path, fixture_set_names, fixture_class_names, &block)

@@ -309,6 +309,7 @@ module ActiveRecord
 
       ActiveRecord::Tasks::DatabaseTasks.expects(:purge).
         with('database' => 'prod-db')
+      ActiveRecord::Base.expects(:establish_connection).with(:production)
 
       ActiveRecord::Tasks::DatabaseTasks.purge_current('production')
     end
@@ -374,6 +375,22 @@ module ActiveRecord
     def test_check_schema_file
       Kernel.expects(:abort).with(regexp_matches(/awesome-file.sql/))
       ActiveRecord::Tasks::DatabaseTasks.check_schema_file("awesome-file.sql")
+    end
+  end
+
+  class DatabaseTasksCheckSchemaFileDefaultsTest < ActiveRecord::TestCase
+    def test_check_schema_file_defaults
+      ActiveRecord::Tasks::DatabaseTasks.stubs(:db_dir).returns('/tmp')
+      assert_equal '/tmp/schema.rb', ActiveRecord::Tasks::DatabaseTasks.schema_file
+    end
+  end
+
+  class DatabaseTasksCheckSchemaFileSpecifiedFormatsTest < ActiveRecord::TestCase
+    {ruby: 'schema.rb', sql: 'structure.sql'}.each_pair do |fmt, filename|
+      define_method("test_check_schema_file_for_#{fmt}_format") do
+        ActiveRecord::Tasks::DatabaseTasks.stubs(:db_dir).returns('/tmp')
+        assert_equal "/tmp/#{filename}", ActiveRecord::Tasks::DatabaseTasks.schema_file(fmt)
+      end
     end
   end
 end

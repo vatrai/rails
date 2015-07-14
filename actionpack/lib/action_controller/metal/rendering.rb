@@ -4,6 +4,17 @@ module ActionController
 
     RENDER_FORMATS_IN_PRIORITY = [:body, :text, :plain, :html]
 
+    module ClassMethods
+      # Documentation at ActionController::Renderer#render
+      delegate :render, to: :renderer
+
+      # Returns a renderer class (inherited from ActionController::Renderer)
+      # for the controller.
+      def renderer
+        @renderer ||= Renderer.for(self)
+      end
+    end
+
     # Before processing, set the request formats in current controller formats.
     def process_action(*) #:nodoc:
       self.formats = request.formats.map(&:ref).compact
@@ -68,6 +79,7 @@ module ActionController
       end
 
       if options.delete(:nothing)
+        ActiveSupport::Deprecation.warn("`:nothing` option is deprecated and will be removed in Rails 5.1. Use `head` method to respond with empty response body.")
         options[:body] = nil
       end
 

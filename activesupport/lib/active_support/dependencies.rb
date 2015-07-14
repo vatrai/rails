@@ -12,11 +12,32 @@ require 'active_support/core_ext/kernel/reporting'
 require 'active_support/core_ext/load_error'
 require 'active_support/core_ext/name_error'
 require 'active_support/core_ext/string/starts_ends_with'
+require "active_support/dependencies/interlock"
 require 'active_support/inflector'
 
 module ActiveSupport #:nodoc:
   module Dependencies #:nodoc:
     extend self
+
+    mattr_accessor :interlock
+    self.interlock = Interlock.new
+
+    # :doc:
+
+    # Execute the supplied block without interference from any
+    # concurrent loads
+    def self.run_interlock
+      Dependencies.interlock.running { yield }
+    end
+
+    # Execute the supplied block while holding an exclusive lock,
+    # preventing any other thread from being inside a #run_interlock
+    # block at the same time
+    def self.load_interlock
+      Dependencies.interlock.loading { yield }
+    end
+
+    # :nodoc:
 
     # Should we turn on Ruby warnings on the first load of dependent files?
     mattr_accessor :warnings_on_first_load
@@ -29,6 +50,10 @@ module ActiveSupport #:nodoc:
     # All files currently loaded.
     mattr_accessor :loaded
     self.loaded = Set.new
+
+    # Stack of files being loaded.
+    mattr_accessor :loading
+    self.loading = []
 
     # Should we load files or require them?
     mattr_accessor :mechanism
@@ -201,7 +226,10 @@ module ActiveSupport #:nodoc:
     # Object includes this module.
     module Loadable #:nodoc:
       def self.exclude_from(base)
-        base.class_eval { define_method(:load, Kernel.instance_method(:load)) }
+        base.class_eval do
+          define_method(:load, Kernel.instance_method(:load))
+          private :load
+        end
       end
 
       def require_or_load(file_name)
@@ -227,26 +255,16 @@ module ActiveSupport #:nodoc:
       end
 
       def load_dependency(file)
-        if Dependencies.load? && ActiveSupport::Dependencies.constant_watch_stack.watching?
-          Dependencies.new_constants_in(Object) { yield }
-        else
-          yield
+        Dependencies.load_interlock do
+          if Dependencies.load? && ActiveSupport::Dependencies.constant_watch_stack.watching?
+            Dependencies.new_constants_in(Object) { yield }
+          else
+            yield
+          end
         end
       rescue Exception => exception  # errors from loading file
         exception.blame_file! file if exception.respond_to? :blame_file!
         raise
-      end
-
-      def load(file, wrap = false)
-        result = false
-        load_dependency(file) { result = super }
-        result
-      end
-
-      def require(file)
-        result = false
-        load_dependency(file) { result = super }
-        result
       end
 
       # Mark the given constant as unloadable. Unloadable constants are removed
@@ -264,6 +282,20 @@ module ActiveSupport #:nodoc:
       # +false+ otherwise.
       def unloadable(const_desc)
         Dependencies.mark_for_unload const_desc
+      end
+
+      private
+
+      def load(file, wrap = false)
+        result = false
+        load_dependency(file) { result = super }
+        result
+      end
+
+      def require(file)
+        result = false
+        load_dependency(file) { result = super }
+        result
       end
     end
 
@@ -316,8 +348,11 @@ module ActiveSupport #:nodoc:
 
     def clear
       log_call
-      loaded.clear
-      remove_unloadable_constants!
+      Dependencies.load_interlock do
+        loaded.clear
+        loading.clear
+        remove_unloadable_constants!
+      end
     end
 
     def require_or_load(file_name, const_path = nil)
@@ -326,41 +361,49 @@ module ActiveSupport #:nodoc:
       expanded = File.expand_path(file_name)
       return if loaded.include?(expanded)
 
-      # Record that we've seen this file *before* loading it to avoid an
-      # infinite loop with mutual dependencies.
-      loaded << expanded
+      Dependencies.load_interlock do
+        # Maybe it got loaded while we were waiting for our lock:
+        return if loaded.include?(expanded)
 
-      begin
-        if load?
-          log "loading #{file_name}"
+        # Record that we've seen this file *before* loading it to avoid an
+        # infinite loop with mutual dependencies.
+        loaded << expanded
+        loading << expanded
 
-          # Enable warnings if this file has not been loaded before and
-          # warnings_on_first_load is set.
-          load_args = ["#{file_name}.rb"]
-          load_args << const_path unless const_path.nil?
+        begin
+          if load?
+            log "loading #{file_name}"
 
-          if !warnings_on_first_load or history.include?(expanded)
-            result = load_file(*load_args)
+            # Enable warnings if this file has not been loaded before and
+            # warnings_on_first_load is set.
+            load_args = ["#{file_name}.rb"]
+            load_args << const_path unless const_path.nil?
+
+            if !warnings_on_first_load or history.include?(expanded)
+              result = load_file(*load_args)
+            else
+              enable_warnings { result = load_file(*load_args) }
+            end
           else
-            enable_warnings { result = load_file(*load_args) }
+            log "requiring #{file_name}"
+            result = require file_name
           end
-        else
-          log "requiring #{file_name}"
-          result = require file_name
+        rescue Exception
+          loaded.delete expanded
+          raise
+        ensure
+          loading.pop
         end
-      rescue Exception
-        loaded.delete expanded
-        raise
-      end
 
-      # Record history *after* loading so first load gets warnings.
-      history << expanded
-      result
+        # Record history *after* loading so first load gets warnings.
+        history << expanded
+        result
+      end
     end
 
     # Is the provided constant path defined?
     def qualified_const_defined?(path)
-      Object.qualified_const_defined?(path.sub(/^::/, ''), false)
+      Object.const_defined?(path, false)
     end
 
     # Given +path+, a filesystem path to a ruby file, return an array of
@@ -408,7 +451,7 @@ module ActiveSupport #:nodoc:
     end
 
     def load_once_path?(path)
-      # to_s works around a ruby1.9 issue where String#starts_with?(Pathname)
+      # to_s works around a ruby issue where String#starts_with?(Pathname)
       # will raise a TypeError: no implicit conversion of Pathname into String
       autoload_once_paths.any? { |base| path.starts_with? base.to_s }
     end
@@ -475,7 +518,7 @@ module ActiveSupport #:nodoc:
         expanded = File.expand_path(file_path)
         expanded.sub!(/\.rb\z/, '')
 
-        if loaded.include?(expanded)
+        if loading.include?(expanded)
           raise "Circular dependency detected while autoloading constant #{qualified_name}"
         else
           require_or_load(expanded, qualified_name)
@@ -594,7 +637,7 @@ module ActiveSupport #:nodoc:
     def autoloaded?(desc)
       return false if desc.is_a?(Module) && desc.anonymous?
       name = to_constant_name desc
-      return false unless qualified_const_defined? name
+      return false unless qualified_const_defined?(name)
       return autoloaded_constants.include?(name)
     end
 
@@ -729,7 +772,7 @@ module ActiveSupport #:nodoc:
     protected
       def log_call(*args)
         if log_activity?
-          arg_str = args.collect { |arg| arg.inspect } * ', '
+          arg_str = args.collect(&:inspect) * ', '
           /in `([a-z_\?\!]+)'/ =~ caller(1).first
           selector = $1 || '<unknown>'
           log "called #{selector}(#{arg_str})"

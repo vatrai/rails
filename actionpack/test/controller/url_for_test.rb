@@ -25,14 +25,13 @@ module AbstractController
 
         path = klass.new.fun_path({:controller => :articles,
                                    :baz        => "baz",
-                                   :zot        => "zot",
-                                   :only_path  => true })
+                                   :zot        => "zot"})
         # :bar key isn't provided
         assert_equal '/foo/zot', path
       end
 
-      def add_host!
-        W.default_url_options[:host] = 'www.basecamphq.com'
+      def add_host!(app = W)
+        app.default_url_options[:host] = 'www.basecamphq.com'
       end
 
       def add_port!
@@ -52,6 +51,20 @@ module AbstractController
       def test_anchor
         assert_equal('/c/a#anchor',
           W.new.url_for(:only_path => true, :controller => 'c', :action => 'a', :anchor => 'anchor')
+        )
+      end
+
+      def test_nil_anchor
+        assert_equal(
+          '/c/a',
+          W.new.url_for(only_path: true, controller: 'c', action: 'a', anchor: nil)
+        )
+      end
+
+      def test_false_anchor
+        assert_equal(
+          '/c/a',
+          W.new.url_for(only_path: true, controller: 'c', action: 'a', anchor: false)
         )
       end
 
@@ -242,6 +255,20 @@ module AbstractController
         )
       end
 
+      def test_relative_url_root_is_respected_with_environment_variable
+        # `config.relative_url_root` is set by ENV['RAILS_RELATIVE_URL_ROOT']
+        w = Class.new {
+          config = ActionDispatch::Routing::RouteSet::Config.new '/subdir'
+          r = ActionDispatch::Routing::RouteSet.new(config)
+          r.draw { get ':controller(/:action(/:id(.:format)))' }
+          include r.url_helpers
+        }
+        add_host!(w)
+        assert_equal('https://www.basecamphq.com/subdir/c/a/i',
+          w.new.url_for(:controller => 'c', :action => 'a', :id => 'i', :protocol => 'https')
+        )
+      end
+
       def test_named_routes
         with_routing do |set|
           set.draw do
@@ -277,6 +304,13 @@ module AbstractController
         end
       end
 
+      def test_using_nil_script_name_properly_concats_with_original_script_name
+        add_host!
+        assert_equal('https://www.basecamphq.com/subdir/c/a/i',
+          W.new.url_for(:controller => 'c', :action => 'a', :id => 'i', :protocol => 'https', :script_name => nil, :original_script_name => '/subdir')
+        )
+      end
+
       def test_only_path
         with_routing do |set|
           set.draw do
@@ -291,7 +325,7 @@ module AbstractController
           assert_equal '/brave/new/world',
             controller.url_for(:controller => 'brave', :action => 'new', :id => 'world', :only_path => true)
 
-          assert_equal("/home/sweet/home/alabama", controller.home_path(:user => 'alabama', :host => 'unused', :only_path => true))
+          assert_equal("/home/sweet/home/alabama", controller.home_path(:user => 'alabama', :host => 'unused'))
           assert_equal("/home/sweet/home/alabama", controller.home_path('alabama'))
         end
       end

@@ -1,4 +1,6 @@
 require 'abstract_unit'
+require 'timeout'
+require 'rack/content_length'
 
 class ResponseTest < ActiveSupport::TestCase
   def setup
@@ -70,12 +72,14 @@ class ResponseTest < ActiveSupport::TestCase
 
   test "content type" do
     [204, 304].each do |c|
+      @response = ActionDispatch::Response.new
       @response.status = c.to_s
       _, headers, _ = @response.to_a
       assert !headers.has_key?("Content-Type"), "#{c} should not have Content-Type header"
     end
 
     [200, 302, 404, 500].each do |c|
+      @response = ActionDispatch::Response.new
       @response.status = c.to_s
       _, headers, _ = @response.to_a
       assert headers.has_key?("Content-Type"), "#{c} did not have Content-Type header"
@@ -220,30 +224,38 @@ class ResponseTest < ActiveSupport::TestCase
     assert @response.respond_to?(:method_missing, true)
   end
 
-  test "can be destructured into status, headers and an enumerable body" do
+  test "can be explicitly destructured into status, headers and an enumerable body" do
     response = ActionDispatch::Response.new(404, { 'Content-Type' => 'text/plain' }, ['Not Found'])
-    status, headers, body = response
+    status, headers, body = *response
 
     assert_equal 404, status
     assert_equal({ 'Content-Type' => 'text/plain' }, headers)
     assert_equal ['Not Found'], body.each.to_a
   end
 
-  test "[response].flatten does not recurse infinitely" do
+  test "[response.to_a].flatten does not recurse infinitely" do
     Timeout.timeout(1) do # use a timeout to prevent it stalling indefinitely
-      status, headers, body = [@response].flatten
+      status, headers, body = [@response.to_a].flatten
       assert_equal @response.status, status
       assert_equal @response.headers, headers
       assert_equal @response.body, body.each.to_a.join
     end
   end
+
+  test "compatibility with Rack::ContentLength" do
+    @response.body = 'Hello'
+    app = lambda { |env| @response.to_a }
+    env = Rack::MockRequest.env_for("/")
+
+    status, headers, body = app.call(env)
+    assert_nil headers['Content-Length']
+
+    status, headers, body = Rack::ContentLength.new(app).call(env)
+    assert_equal '5', headers['Content-Length']
+  end
 end
 
 class ResponseIntegrationTest < ActionDispatch::IntegrationTest
-  def app
-    @app
-  end
-
   test "response cache control from railsish app" do
     @app = lambda { |env|
       ActionDispatch::Response.new.tap { |resp|

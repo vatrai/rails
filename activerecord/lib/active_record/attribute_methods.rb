@@ -1,4 +1,5 @@
 require 'active_support/core_ext/enumerable'
+require 'active_support/core_ext/string/filters'
 require 'mutex_m'
 require 'thread_safe'
 
@@ -31,7 +32,7 @@ module ActiveRecord
       end
     }
 
-    BLACKLISTED_CLASS_METHODS = %w(private public protected)
+    BLACKLISTED_CLASS_METHODS = %w(private public protected allocate new name parent superclass)
 
     class AttributeMethodCache
       def initialize
@@ -69,6 +70,8 @@ module ActiveRecord
         @generated_attribute_methods = GeneratedAttributeMethods.new { extend Mutex_m }
         @attribute_methods_generated = false
         include @generated_attribute_methods
+
+        super
       end
 
       # Generates all the attribute related methods for columns in the database
@@ -80,7 +83,7 @@ module ActiveRecord
         generated_attribute_methods.synchronize do
           return false if @attribute_methods_generated
           superclass.define_attribute_methods unless self == base_class
-          super(column_names)
+          super(attribute_names)
           @attribute_methods_generated = true
         end
         true
@@ -88,7 +91,7 @@ module ActiveRecord
 
       def undefine_attribute_methods # :nodoc:
         generated_attribute_methods.synchronize do
-          super if @attribute_methods_generated
+          super if defined?(@attribute_methods_generated) && @attribute_methods_generated
           @attribute_methods_generated = false
         end
       end
@@ -109,7 +112,7 @@ module ActiveRecord
       #   # => false
       def instance_method_already_implemented?(method_name)
         if dangerous_attribute_method?(method_name)
-          raise DangerousAttributeError, "#{method_name} is defined by Active Record"
+          raise DangerousAttributeError, "#{method_name} is defined by Active Record. Check to make sure that you don't have an attribute or method with the same name."
         end
 
         if superclass == Base
@@ -147,7 +150,7 @@ module ActiveRecord
         BLACKLISTED_CLASS_METHODS.include?(method_name.to_s) || class_method_defined_within?(method_name, Base)
       end
 
-      def class_method_defined_within?(name, klass, superklass = klass.superclass) # :nodoc
+      def class_method_defined_within?(name, klass, superklass = klass.superclass) # :nodoc:
         if klass.respond_to?(name, true)
           if superklass.respond_to?(name, true)
             klass.method(name).owner != superklass.method(name).owner
@@ -182,14 +185,15 @@ module ActiveRecord
       #   # => ["id", "created_at", "updated_at", "name", "age"]
       def attribute_names
         @attribute_names ||= if !abstract_class? && table_exists?
-            column_names
+            attribute_types.keys
           else
             []
           end
       end
 
       # Returns the column object for the named attribute.
-      # Returns nil if the named attribute does not exist.
+      # Returns a +ActiveRecord::ConnectionAdapters::NullColumn+ if the
+      # named attribute does not exist.
       #
       #   class Person < ActiveRecord::Base
       #   end
@@ -199,23 +203,18 @@ module ActiveRecord
       #   # => #<ActiveRecord::ConnectionAdapters::Column:0x007ff4ab083980 @name="name", @sql_type="varchar(255)", @null=true, ...>
       #
       #   person.column_for_attribute(:nothing)
-      #   # => nil
+      #   # => #<ActiveRecord::ConnectionAdapters::NullColumn:0xXXX @name=nil, @sql_type=nil, @cast_type=#<Type::Value>, ...>
       def column_for_attribute(name)
-        column = columns_hash[name.to_s]
-        if column.nil?
-          ActiveSupport::Deprecation.warn(<<-MESSAGE.strip_heredoc)
-            `column_for_attribute` will return a null object for non-existent columns
-            in Rails 5.0. Use `has_attribute?` if you need to check for an
-            attribute's existence.
-          MESSAGE
+        name = name.to_s
+        columns_hash.fetch(name) do
+          ConnectionAdapters::NullColumn.new(name)
         end
-        column
       end
     end
 
     # A Person object with a name attribute can ask <tt>person.respond_to?(:name)</tt>,
     # <tt>person.respond_to?(:name=)</tt>, and <tt>person.respond_to?(:name?)</tt>
-    # which will all return +true+. It also define the attribute methods if they have
+    # which will all return +true+. It also defines the attribute methods if they have
     # not been generated.
     #
     #   class Person < ActiveRecord::Base
@@ -329,7 +328,7 @@ module ActiveRecord
     #   task.attribute_present?(:title)   # => true
     #   task.attribute_present?(:is_done) # => true
     def attribute_present?(attribute)
-      value = read_attribute(attribute)
+      value = _read_attribute(attribute)
       !value.nil? && !(value.respond_to?(:empty?) && value.empty?)
     end
 
@@ -368,6 +367,39 @@ module ActiveRecord
     #   person[:age] # => Fixnum
     def []=(attr_name, value)
       write_attribute(attr_name, value)
+    end
+
+    # Returns the name of all database fields which have been read from this
+    # model. This can be useful in development mode to determine which fields
+    # need to be selected. For performance critical pages, selecting only the
+    # required fields can be an easy performance win (assuming you aren't using
+    # all of the fields on the model).
+    #
+    # For example:
+    #
+    # class PostsController < ActionController::Base
+    #   after_action :print_accessed_fields, only: :index
+    #
+    #   def index
+    #     @posts = Post.all
+    #   end
+    #
+    #   private
+    #
+    #   def print_accessed_fields
+    #     p @posts.first.accessed_fields
+    #   end
+    # end
+    #
+    # Which allows you to quickly change your code to:
+    #
+    # class PostsController < ActionController::Base
+    #   def index
+    #     @posts = Post.select(:id, :title, :author_id, :updated_at)
+    #   end
+    # end
+    def accessed_fields
+      @attributes.accessed
     end
 
     protected
@@ -430,7 +462,7 @@ module ActiveRecord
     end
 
     def typecasted_attribute_value(name)
-      read_attribute(name)
+      _read_attribute(name)
     end
   end
 end

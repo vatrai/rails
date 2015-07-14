@@ -25,7 +25,7 @@ class Array
   #   array[1][2] # => nil
   #   dup[1][2]   # => 4
   def deep_dup
-    map { |it| it.deep_dup }
+    map(&:deep_dup)
   end
 end
 
@@ -40,6 +40,7 @@ class Hash
   #   dup[:a][:c]  # => "c"
   def deep_dup
     each_with_object(dup) do |(key, value), hash|
+      hash.delete(key)
       hash[key.deep_dup] = value.deep_dup
     end
   end

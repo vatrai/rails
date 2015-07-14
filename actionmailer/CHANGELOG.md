@@ -1,44 +1,87 @@
-*   Added #deliver_later, #deliver_now and deprecate #deliver in favour of
-    #deliver_now. #deliver_later will enqueue a job to render and deliver
-    the mail instead of delivering it right at that moment. The job is enqueued
-    using the new Active Job framework in Rails, and will use whatever queue is
-    configured for Rails.
+*   Add `config.action_mailer.deliver_later_queue_name` configuration to set the
+    mailer queue name.
 
-    *DHH/Abdelkader Boudih/Cristian Bica*
+    *Chris McGrath*
 
-*   Make ActionMailer::Previews methods class methods. Previously they were
-    instance methods and ActionMailer tries to render a message when they
-    are called.
+*   `assert_emails` in block form use the given number as expected value.
+    This makes the error message much easier to understand.
 
-    *Cristian Bica*
+    *Yuji Yaginuma*
 
-*   Deprecate `*_path` helpers in email views. When used they generate
-    non-working links and are not the intention of most developers. Instead
-    we recommend to use `*_url` helper.
+*   Add support for inline images in mailer previews by using an interceptor
+    class to convert cid: urls in image src attributes to data urls.
 
-    *Richard Schneeman*
+    *Andrew White*
 
-*   Raise an exception when attachments are added after `mail` was called.
-    This is a safeguard to prevent invalid emails.
+*   Mailer preview now uses `url_for` to fix links to emails for apps running on
+    a subdirectory.
 
-    Fixes #16163.
+    *Remo Mueller*
 
-    *Yves Senn*
+*   Mailer previews no longer crash when the `mail` method wasn't called
+    (`NullMail`).
 
-*   Add `config.action_mailer.show_previews` configuration option.
-
-    This config option can be used to enable the mail preview in environments
-    other than development (such as staging).
-
-    Defaults to `true` in development and false elsewhere.
-
-    *Leonard Garvey*
-
-*   Allow preview interceptors to be registered through
-    `config.action_mailer.preview_interceptors`.
-
-    See #15739.
+    Fixes #19849.
 
     *Yves Senn*
 
-Please check [4-1-stable](https://github.com/rails/rails/blob/4-1-stable/actionmailer/CHANGELOG.md) for previous changes.
+*   Make sure labels and values line up in mailer previews.
+
+    *Yves Senn*
+
+*   Add `assert_enqueued_emails` and `assert_no_enqueued_emails`.
+
+    Example:
+
+        def test_emails
+          assert_enqueued_emails 2 do
+            ContactMailer.welcome.deliver_later
+            ContactMailer.welcome.deliver_later
+          end
+        end
+
+        def test_no_emails
+          assert_no_enqueued_emails do
+            # No emails enqueued here
+          end
+        end
+
+    *George Claghorn*
+
+*   Add `_mailer` suffix to mailers created via generator, following the same
+    naming convention used in controllers and jobs.
+
+    *Carlos Souza*
+
+*   Remove deprecate `*_path` helpers in email views.
+
+    *Rafael Mendonça França*
+
+*   Remove deprecated `deliver` and `deliver!` methods.
+
+    *claudiob*
+
+*   Template lookup now respects default locale and I18n fallbacks.
+
+    Given the following templates:
+
+        mailer/demo.html.erb
+        mailer/demo.en.html.erb
+        mailer/demo.pt.html.erb
+
+    Before this change, for a locale that doesn't have its associated file, the
+    `mailer/demo.html.erb` would be rendered even if `en` was the default locale.
+
+    Now `mailer/demo.en.html.erb` has precedence over the file without locale.
+
+    Also, it is possible to give a fallback.
+
+        mailer/demo.pt.html.erb
+        mailer/demo.pt-BR.html.erb
+
+    So if the locale is `pt-PT`, `mailer/demo.pt.html.erb` will be rendered given
+    the right I18n fallback configuration.
+
+    *Rafael Mendonça França*
+
+Please check [4-2-stable](https://github.com/rails/rails/blob/4-2-stable/actionmailer/CHANGELOG.md) for previous changes.

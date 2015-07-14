@@ -11,7 +11,7 @@ module ActiveRecord
         if value == ''
           nil
         else
-          ConnectionAdapters::Column::TRUE_VALUES.include?(value)
+          !ConnectionAdapters::Column::FALSE_VALUES.include?(value)
         end
       end
     end

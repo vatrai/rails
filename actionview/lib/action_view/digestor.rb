@@ -12,7 +12,7 @@ module ActionView
       # Supported options:
       #
       # * <tt>name</tt>   - Template name
-      # * <tt>finder</tt>  - An instance of ActionView::LookupContext
+      # * <tt>finder</tt>  - An instance of <tt>ActionView::LookupContext</tt>
       # * <tt>dependencies</tt>  - An array of dependent views
       # * <tt>partial</tt>  - Specifies whether the template is a partial
       def digest(options)
@@ -70,7 +70,8 @@ module ActionView
     def dependencies
       DependencyTracker.find_dependencies(name, template)
     rescue ActionView::MissingTemplate
-      [] # File doesn't exist, so no dependencies
+      logger.try :error, "  '#{name}' file doesn't exist, so no dependencies"
+      []
     end
 
     def nested_dependencies

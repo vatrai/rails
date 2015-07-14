@@ -1,4 +1,5 @@
 require 'fileutils'
+require 'yaml'
 require 'active_support/core_ext/hash/keys'
 require 'active_support/core_ext/object/blank'
 require 'active_support/key_generator'
@@ -6,8 +7,7 @@ require 'active_support/message_verifier'
 require 'rails/engine'
 
 module Rails
-  # In Rails 3.0, a Rails::Application object was introduced which is nothing more than
-  # an Engine but with the responsibility of coordinating the whole boot process.
+  # An Engine with the responsibility of coordinating the whole boot process.
   #
   # == Initialization
   #
@@ -88,6 +88,7 @@ module Rails
       def inherited(base)
         super
         Rails.app_class = base
+        add_lib_to_load_path!(find_root(base.called_from))
       end
 
       def instance
@@ -96,6 +97,10 @@ module Rails
 
       def create(initial_variable_values = {}, &block)
         new(initial_variable_values, &block).run_load_hooks!
+      end
+
+      def find_root(from)
+        find_root_with_flag "config.ru", from, Dir.pwd
       end
 
       # Makes the +new+ method public.
@@ -129,8 +134,6 @@ module Rails
       # are these actually used?
       @initial_variable_values = initial_variable_values
       @block = block
-
-      add_lib_to_load_path!
     end
 
     # Returns true if the application is initialized.
@@ -156,8 +159,9 @@ module Rails
     # Implements call according to the Rack API. It simply
     # dispatches the request to the underlying middleware stack.
     def call(env)
-      env["ORIGINAL_FULLPATH"] = build_original_fullpath(env)
-      env["ORIGINAL_SCRIPT_NAME"] = env["SCRIPT_NAME"]
+      req = ActionDispatch::Request.new env
+      env["ORIGINAL_FULLPATH"] = req.fullpath
+      env["ORIGINAL_SCRIPT_NAME"] = req.script_name
       super(env)
     end
 
@@ -175,7 +179,7 @@ module Rails
           key_generator = ActiveSupport::KeyGenerator.new(secrets.secret_key_base, iterations: 1000)
           ActiveSupport::CachingKeyGenerator.new(key_generator)
         else
-          ActiveSupport::LegacyKeyGenerator.new(config.secret_token)
+          ActiveSupport::LegacyKeyGenerator.new(secrets.secret_token)
         end
     end
 
@@ -217,14 +221,13 @@ module Rails
     #       namespace: my_app_development
     #
     #     # config/production.rb
-    #     MyApp::Application.configure do
+    #     Rails.application.configure do
     #       config.middleware.use ExceptionNotifier, config_for(:exception_notification)
     #     end
     def config_for(name)
       yaml = Pathname.new("#{paths["config"].existent.first}/#{name}.yml")
 
       if yaml.exist?
-        require "yaml"
         require "erb"
         (YAML.load(ERB.new(yaml.read).result) || {})[Rails.env] || {}
       else
@@ -245,7 +248,7 @@ module Rails
         super.merge({
           "action_dispatch.parameter_filter" => config.filter_parameters,
           "action_dispatch.redirect_filter" => config.filter_redirect,
-          "action_dispatch.secret_token" => config.secret_token,
+          "action_dispatch.secret_token" => secrets.secret_token,
           "action_dispatch.secret_key_base" => secrets.secret_key_base,
           "action_dispatch.show_exceptions" => config.action_dispatch.show_exceptions,
           "action_dispatch.show_detailed_exceptions" => config.consider_all_requests_local,
@@ -313,8 +316,8 @@ module Rails
     # are changing config.root inside your application definition or having a custom
     # Rails application, you will need to add lib to $LOAD_PATH on your own in case
     # you need to load files in lib/ during the application configuration as well.
-    def add_lib_to_load_path! #:nodoc:
-      path = File.join config.root, 'lib'
+    def self.add_lib_to_load_path!(root) #:nodoc:
+      path = File.join root, 'lib'
       if File.exist?(path) && !$LOAD_PATH.include?(path)
         $LOAD_PATH.unshift(path)
       end
@@ -358,14 +361,28 @@ module Rails
     end
 
     def config #:nodoc:
-      @config ||= Application::Configuration.new(find_root_with_flag("config.ru", Dir.pwd))
+      @config ||= Application::Configuration.new(self.class.find_root(self.class.called_from))
     end
 
     def config=(configuration) #:nodoc:
       @config = configuration
     end
 
-    def secrets #:nodoc:
+    # Returns secrets added to config/secrets.yml.
+    #
+    # Example:
+    #
+    #     development:
+    #       secret_key_base: 836fa3665997a860728bcb9e9a1e704d427cfc920e79d847d79c8a9a907b9e965defa4154b2b86bdec6930adbe33f21364523a6f6ce363865724549fdfc08553
+    #     test:
+    #       secret_key_base: 5a37811464e7d378488b0f073e2193b093682e4e21f5d6f3ae0a4e1781e61a351fdc878a843424e81c73fb484a40d23f92c8dafac4870e74ede6e5e174423010
+    #     production:
+    #       secret_key_base: <%= ENV["SECRET_KEY_BASE"] %>
+    #       namespace: my_app_production
+    #
+    # +Rails.application.secrets.namespace+ returns +my_app_production+ in the
+    # production environment.
+    def secrets
       @secrets ||= begin
         secrets = ActiveSupport::OrderedOptions.new
         yaml = config.paths["config/secrets"].first
@@ -378,6 +395,8 @@ module Rails
 
         # Fallback to config.secret_key_base if secrets.secret_key_base isn't set
         secrets.secret_key_base ||= config.secret_key_base
+        # Fallback to config.secret_token if secrets.secret_token isn't set
+        secrets.secret_token ||= config.secret_token
 
         secrets
       end
@@ -401,21 +420,18 @@ module Rails
 
     console do
       unless ::Kernel.private_method_defined?(:y)
-        if RUBY_VERSION >= '2.0'
-          require "psych/y"
-        else
-          module ::Kernel
-            def y(*objects)
-              puts ::Psych.dump_stream(*objects)
-            end
-            private :y
-          end
-        end
+        require "psych/y"
       end
     end
 
+    # Return an array of railties respecting the order they're loaded
+    # and the order specified by the +railties_order+ config.
+    #
+    # While running initializers we need engines in reverse order here when
+    # copying migrations from railties ; we need them in the order given by
+    # +railties_order+.
     def migration_railties # :nodoc:
-      (ordered_railties & railties_without_main_app).reverse
+      ordered_railties.flatten - [self]
     end
 
   protected
@@ -448,11 +464,6 @@ module Rails
       super
     end
 
-    def railties_without_main_app # :nodoc:
-      @railties_without_main_app ||= Rails::Railtie.subclasses.map(&:instance) +
-        Rails::Engine.subclasses.map(&:instance)
-    end
-
     # Returns the ordered railties for this application considering railties_order.
     def ordered_railties #:nodoc:
       @ordered_railties ||= begin
@@ -472,13 +483,13 @@ module Rails
 
         index = order.index(:all)
         order[index] = all
-        order.reverse.flatten
+        order
       end
     end
 
     def railties_initializers(current) #:nodoc:
       initializers = []
-      ordered_railties.each do |r|
+      ordered_railties.reverse.flatten.each do |r|
         if r == self
           initializers += current
         else
@@ -493,21 +504,14 @@ module Rails
       default_stack.build_stack
     end
 
-    def build_original_fullpath(env) #:nodoc:
-      path_info    = env["PATH_INFO"]
-      query_string = env["QUERY_STRING"]
-      script_name  = env["SCRIPT_NAME"]
-
-      if query_string.present?
-        "#{script_name}#{path_info}?#{query_string}"
-      else
-        "#{script_name}#{path_info}"
-      end
-    end
-
     def validate_secret_key_config! #:nodoc:
-      if secrets.secret_key_base.blank? && config.secret_token.blank?
-        raise "Missing `secret_key_base` for '#{Rails.env}' environment, set this value in `config/secrets.yml`"
+      if secrets.secret_key_base.blank?
+        ActiveSupport::Deprecation.warn "You didn't set `secret_key_base`. " +
+          "Read the upgrade documentation to learn more about this new config option."
+
+        if secrets.secret_token.blank?
+          raise "Missing `secret_key_base` for '#{Rails.env}' environment, set this value in `config/secrets.yml`"
+        end
       end
     end
   end

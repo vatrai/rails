@@ -1,4 +1,3 @@
-# encoding: utf-8
 require "cases/helper"
 require 'models/owner'
 require 'tempfile'
@@ -6,10 +5,10 @@ require 'support/ddl_helper'
 
 module ActiveRecord
   module ConnectionAdapters
-    class SQLite3AdapterTest < ActiveRecord::TestCase
+    class SQLite3AdapterTest < ActiveRecord::SQLite3TestCase
       include DdlHelper
 
-      self.use_transactional_fixtures = false
+      self.use_transactional_tests = false
 
       class DualEncoding < ActiveRecord::Base
       end
@@ -23,7 +22,7 @@ module ActiveRecord
       def test_bad_connection
         assert_raise ActiveRecord::NoDatabaseError do
           connection = ActiveRecord::Base.sqlite3_connection(adapter: "sqlite3", database: "/tmp/should/_not/_exist/-cinco-dog.db")
-          connection.exec_query('drop table if exists ex')
+          connection.drop_table 'ex', if_exists: true
         end
       end
 
@@ -83,8 +82,7 @@ module ActiveRecord
 
       def test_exec_insert
         with_example_table do
-          column = @conn.columns('ex').find { |col| col.name == 'number' }
-          vals   = [[column, 10]]
+          vals = [Relation::QueryAttribute.new("number", 10, Type::Value.new)]
           @conn.exec_insert('insert into ex (number) VALUES (?)', 'SQL', vals)
 
           result = @conn.exec_query(
@@ -133,8 +131,8 @@ module ActiveRecord
       end
 
       def test_bind_value_substitute
-        bind_param = @conn.substitute_at('foo', 0)
-        assert_equal Arel.sql('?'), bind_param
+        bind_param = @conn.substitute_at('foo')
+        assert_equal Arel.sql('?'), bind_param.to_sql
       end
 
       def test_exec_no_binds
@@ -157,7 +155,7 @@ module ActiveRecord
         with_example_table 'id int, data string' do
           @conn.exec_query('INSERT INTO ex (id, data) VALUES (1, "foo")')
           result = @conn.exec_query(
-            'SELECT id, data FROM ex WHERE id = ?', nil, [[nil, 1]])
+            'SELECT id, data FROM ex WHERE id = ?', nil, [Relation::QueryAttribute.new(nil, 1, Type::Value.new)])
 
           assert_equal 1, result.rows.length
           assert_equal 2, result.columns.length
@@ -169,10 +167,9 @@ module ActiveRecord
       def test_exec_query_typecasts_bind_vals
         with_example_table 'id int, data string' do
           @conn.exec_query('INSERT INTO ex (id, data) VALUES (1, "foo")')
-          column = @conn.columns('ex').find { |col| col.name == 'id' }
 
           result = @conn.exec_query(
-            'SELECT id, data FROM ex WHERE id = ?', nil, [[column, '1-fuu']])
+            'SELECT id, data FROM ex WHERE id = ?', nil, [Relation::QueryAttribute.new("id", "1-fuu", Type::Integer.new)])
 
           assert_equal 1, result.rows.length
           assert_equal 2, result.columns.length
@@ -194,7 +191,7 @@ module ActiveRecord
         binary.save!
         assert_equal str, binary.data
       ensure
-        DualEncoding.connection.execute('DROP TABLE IF EXISTS dual_encodings')
+        DualEncoding.connection.drop_table 'dual_encodings', if_exists: true
       end
 
       def test_type_cast_should_not_mutate_encoding
@@ -297,7 +294,7 @@ module ActiveRecord
       def test_tables_logs_name
         sql = <<-SQL
           SELECT name FROM sqlite_master
-          WHERE type = 'table' AND NOT name = 'sqlite_sequence'
+          WHERE (type = 'table' OR type = 'view') AND NOT name = 'sqlite_sequence'
         SQL
         assert_logged [[sql.squish, 'SCHEMA', []]] do
           @conn.tables('hello')
@@ -316,7 +313,7 @@ module ActiveRecord
         with_example_table do
           sql = <<-SQL
             SELECT name FROM sqlite_master
-            WHERE type = 'table'
+            WHERE (type = 'table' OR type = 'view')
             AND NOT name = 'sqlite_sequence' AND name = \"ex\"
           SQL
           assert_logged [[sql.squish, 'SCHEMA', []]] do
@@ -327,11 +324,11 @@ module ActiveRecord
 
       def test_columns
         with_example_table do
-          columns = @conn.columns('ex').sort_by { |x| x.name }
+          columns = @conn.columns('ex').sort_by(&:name)
           assert_equal 2, columns.length
-          assert_equal %w{ id number }.sort, columns.map { |x| x.name }
-          assert_equal [nil, nil], columns.map { |x| x.default }
-          assert_equal [true, true], columns.map { |x| x.null }
+          assert_equal %w{ id number }.sort, columns.map(&:name)
+          assert_equal [nil, nil], columns.map(&:default)
+          assert_equal [true, true], columns.map(&:null)
         end
       end
 
@@ -405,6 +402,12 @@ module ActiveRecord
         end
       end
 
+      def test_composite_primary_key
+        with_example_table 'id integer, number integer, foo integer, PRIMARY KEY (id, number)' do
+          assert_nil @conn.primary_key('ex')
+        end
+      end
+
       def test_supports_extensions
         assert_not @conn.supports_extensions?, 'does not support extensions'
       end
@@ -418,14 +421,14 @@ module ActiveRecord
       end
 
       def test_statement_closed
-        db = SQLite3::Database.new(ActiveRecord::Base.
+        db = ::SQLite3::Database.new(ActiveRecord::Base.
                                    configurations['arunit']['database'])
-        statement = SQLite3::Statement.new(db,
+        statement = ::SQLite3::Statement.new(db,
                                            'CREATE TABLE statement_test (number integer not null)')
-        statement.stubs(:step).raises(SQLite3::BusyException, 'busy')
+        statement.stubs(:step).raises(::SQLite3::BusyException, 'busy')
         statement.stubs(:columns).once.returns([])
         statement.expects(:close).once
-        SQLite3::Statement.stubs(:new).returns(statement)
+        ::SQLite3::Statement.stubs(:new).returns(statement)
 
         assert_raises ActiveRecord::StatementInvalid do
           @conn.exec_query 'select * from statement_test'

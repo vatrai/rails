@@ -1,5 +1,5 @@
 #--
-# Copyright (c) 2005-2014 David Heinemeier Hansson
+# Copyright (c) 2005-2015 David Heinemeier Hansson
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -59,6 +59,7 @@ module ActiveSupport
     autoload :StringInquirer
     autoload :TaggedLogging
     autoload :XmlMini
+    autoload :ArrayInquirer
   end
 
   autoload :Rescuable
@@ -69,6 +70,16 @@ module ActiveSupport
     super
 
     NumberHelper.eager_load!
+  end
+
+  cattr_accessor :test_order # :nodoc:
+
+  def self.halt_callback_chains_on_return_false
+    Callbacks::CallbackChain.halt_and_display_warning_on_return_false
+  end
+
+  def self.halt_callback_chains_on_return_false=(value)
+    Callbacks::CallbackChain.halt_and_display_warning_on_return_false = value
   end
 end
 

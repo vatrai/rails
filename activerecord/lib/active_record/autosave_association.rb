@@ -177,14 +177,14 @@ module ActiveRecord
         # before actually defining them.
         def add_autosave_association_callbacks(reflection)
           save_method = :"autosave_associated_records_for_#{reflection.name}"
-          validation_method = :"validate_associated_records_for_#{reflection.name}"
-          collection = reflection.collection?
 
-          if collection
+          if reflection.collection?
             before_save :before_save_collection_association
 
             define_non_cyclic_method(save_method) { save_collection_association(reflection) }
-            after_save save_method
+            # Doesn't use after_save as that would save associations added in after_create/after_update twice
+            after_create save_method
+            after_update save_method
           elsif reflection.has_one?
             define_method(save_method) { save_has_one_association(reflection) } unless method_defined?(save_method)
             # Configures two callbacks instead of a single after_save so that
@@ -198,13 +198,29 @@ module ActiveRecord
             after_create save_method
             after_update save_method
           else
-            define_non_cyclic_method(save_method) { save_belongs_to_association(reflection) }
+            define_non_cyclic_method(save_method) { throw(:abort) if save_belongs_to_association(reflection) == false }
             before_save save_method
           end
 
+          define_autosave_validation_callbacks(reflection)
+        end
+
+        def define_autosave_validation_callbacks(reflection)
+          validation_method = :"validate_associated_records_for_#{reflection.name}"
           if reflection.validate? && !method_defined?(validation_method)
-            method = (collection ? :validate_collection_association : :validate_single_association)
-            define_non_cyclic_method(validation_method) { send(method, reflection) }
+            if reflection.collection?
+              method = :validate_collection_association
+            else
+              method = :validate_single_association
+            end
+
+            define_non_cyclic_method(validation_method) do
+              send(method, reflection)
+              # TODO: remove the following line as soon as the return value of
+              # callbacks is ignored, that is, returning `false` does not
+              # display a deprecation warning or halts the callback chain.
+              true
+            end
             validate validation_method
           end
         end
@@ -261,20 +277,27 @@ module ActiveRecord
         if new_record
           association && association.target
         elsif autosave
-          association.target.find_all { |record| record.changed_for_autosave? }
+          association.target.find_all(&:changed_for_autosave?)
         else
-          association.target.find_all { |record| record.new_record? }
+          association.target.find_all(&:new_record?)
         end
       end
 
       # go through nested autosave associations that are loaded in memory (without loading
       # any new ones), and return true if is changed for autosave
       def nested_records_changed_for_autosave?
-        self.class._reflections.values.any? do |reflection|
-          if reflection.options[:autosave]
-            association = association_instance_get(reflection.name)
-            association && Array.wrap(association.target).any? { |a| a.changed_for_autosave? }
+        @_nested_records_changed_for_autosave_already_called ||= false
+        return false if @_nested_records_changed_for_autosave_already_called
+        begin
+          @_nested_records_changed_for_autosave_already_called = true
+          self.class._reflections.values.any? do |reflection|
+            if reflection.options[:autosave]
+              association = association_instance_get(reflection.name)
+              association && Array.wrap(association.target).any?(&:changed_for_autosave?)
+            end
           end
+        ensure
+          @_nested_records_changed_for_autosave_already_called = false
         end
       end
 
@@ -338,7 +361,6 @@ module ActiveRecord
           autosave = reflection.options[:autosave]
 
           if records = associated_records_to_validate_or_save(association, @new_record_before_save, autosave)
-
             if autosave
               records_to_destroy = records.select(&:marked_for_destruction?)
               records_to_destroy.each { |record| association.destroy(record) }
@@ -362,7 +384,6 @@ module ActiveRecord
 
               raise ActiveRecord::Rollback unless saved
             end
-            @new_record_before_save = false
           end
 
           # reconstruct the scope now that we know the owner's id
@@ -405,7 +426,9 @@ module ActiveRecord
 
       # If the record is new or it has changed, returns true.
       def record_changed?(reflection, record, key)
-        record.new_record? || record[reflection.foreign_key] != key || record.attribute_changed?(reflection.foreign_key)
+        record.new_record? ||
+          (record.has_attribute?(reflection.foreign_key) && record[reflection.foreign_key] != key) ||
+          record.attribute_changed?(reflection.foreign_key)
       end
 
       # Saves the associated record if it's new or <tt>:autosave</tt> is enabled.

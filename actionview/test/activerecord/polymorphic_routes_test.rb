@@ -25,15 +25,17 @@ class Series < ActiveRecord::Base
   self.table_name = 'projects'
 end
 
-class ModelDelegator < ActiveRecord::Base
-  self.table_name = 'projects'
-
+class ModelDelegator
   def to_model
     ModelDelegate.new
   end
 end
 
 class ModelDelegate
+  def persisted?
+    true
+  end
+
   def model_name
     ActiveModel::Name.new(self.class)
   end
@@ -111,7 +113,7 @@ class PolymorphicRoutesTest < ActionController::TestCase
 
   def test_passing_routes_proxy
     with_namespaced_routes(:blog) do
-      proxy = ActionDispatch::Routing::RoutesProxy.new(_routes, self)
+      proxy = ActionDispatch::Routing::RoutesProxy.new(_routes, self, _routes.url_helpers)
       @blog_post.save
       assert_url "http://example.com/posts/#{@blog_post.id}", [proxy, @blog_post]
     end
@@ -183,13 +185,30 @@ class PolymorphicRoutesTest < ActionController::TestCase
     end
   end
 
-  def test_with_nil_in_list
+  def test_with_entirely_nil_list
     with_test_routes do
       exception = assert_raise ArgumentError do
         @series.save
-        polymorphic_url([nil, @series])
+        polymorphic_url([nil, nil])
       end
       assert_equal "Nil location provided. Can't build URI.", exception.message
+    end
+  end
+
+  def test_with_nil_in_list_for_resource_that_could_be_top_level_or_nested
+    with_top_level_and_nested_routes do
+      @blog_post.save
+      assert_equal "http://example.com/posts/#{@blog_post.id}", polymorphic_url([nil, @blog_post])
+    end
+  end
+
+  def test_with_nil_in_list_does_not_generate_invalid_link
+    with_top_level_and_nested_routes do
+      exception = assert_raise NoMethodError do
+        @series.save
+        polymorphic_url([nil, @series])
+      end
+      assert_match(/undefined method `series_url'/, exception.message)
     end
   end
 
@@ -262,6 +281,15 @@ class PolymorphicRoutesTest < ActionController::TestCase
   def test_url_helper_prefixed_with_new
     with_test_routes do
       assert_equal "http://example.com/projects/new", new_polymorphic_url(@project)
+    end
+  end
+
+  def test_regression_path_helper_prefixed_with_new_and_edit
+    with_test_routes do
+      assert_equal "/projects/new", new_polymorphic_path(@project)
+
+      @project.save
+      assert_equal "/projects/#{@project.id}/edit", edit_polymorphic_path(@project)
     end
   end
 
@@ -579,10 +607,15 @@ class PolymorphicRoutesTest < ActionController::TestCase
     end
   end
 
-  def test_routing_a_to_model_delegate
+  def test_routing_to_a_model_delegate
     with_test_routes do
-      @delegator.save
       assert_url "http://example.com/model_delegates/overridden", @delegator
+    end
+  end
+
+  def test_nested_routing_to_a_model_delegate
+    with_test_routes do
+      assert_url "http://example.com/foo/model_delegates/overridden", [:foo, @delegator]
     end
   end
 
@@ -619,6 +652,24 @@ class PolymorphicRoutesTest < ActionController::TestCase
         end
         resources :series
         resources :model_delegates
+        namespace :foo do
+          resources :model_delegates
+        end
+      end
+
+      extend @routes.url_helpers
+      yield
+    end
+  end
+
+  def with_top_level_and_nested_routes(options = {})
+    with_routing do |set|
+      set.draw do
+        resources :blogs do
+          resources :posts
+          resources :series
+        end
+        resources :posts
       end
 
       extend @routes.url_helpers

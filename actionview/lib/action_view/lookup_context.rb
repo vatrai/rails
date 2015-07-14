@@ -6,7 +6,7 @@ require 'action_view/template/resolver'
 module ActionView
   # = Action View Lookup Context
   #
-  # LookupContext is the object responsible to hold all information required to lookup
+  # <tt>LookupContext</tt> is the object responsible to hold all information required to lookup
   # templates, i.e. view paths and details. The LookupContext is also responsible to
   # generate a key, given to view paths, used in the resolver cache lookup. Since
   # this key is generated just once during the request, it speeds up all cache accesses.
@@ -126,7 +126,7 @@ module ActionView
         @view_paths.find_all(*args_for_lookup(name, prefixes, partial, keys, options))
       end
 
-      def exists?(name, prefixes = [], partial = false, keys = [], options = {})
+      def exists?(name, prefixes = [], partial = false, keys = [], **options)
         @view_paths.exists?(*args_for_lookup(name, prefixes, partial, keys, options))
       end
       alias :template_exists? :exists?
@@ -191,7 +191,6 @@ module ActionView
 
     def initialize(view_paths, details = {}, prefixes = [])
       @details, @details_key = {}, nil
-      @skip_default_locale = false
       @cache = true
       @prefixes = prefixes
       @rendered_format = nil
@@ -213,12 +212,6 @@ module ActionView
       super(values)
     end
 
-    # Do not use the default locale on template lookup.
-    def skip_default_locale!
-      @skip_default_locale = true
-      self.locale = nil
-    end
-
     # Override locale to return a symbol instead of array.
     def locale
       @details[:locale].first
@@ -233,7 +226,7 @@ module ActionView
         config.locale = value
       end
 
-      super(@skip_default_locale ? I18n.locale : default_locale)
+      super(default_locale)
     end
 
     # Uses the first format in the formats array for layout lookup.

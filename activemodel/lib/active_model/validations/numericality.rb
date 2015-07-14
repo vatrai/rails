@@ -23,6 +23,10 @@ module ActiveModel
         raw_value = record.send(before_type_cast) if record.respond_to?(before_type_cast)
         raw_value ||= value
 
+        if record_attribute_changed_in_place?(record, attr_name)
+          raw_value = value
+        end
+
         return if options[:allow_nil] && raw_value.nil?
 
         unless value = parse_raw_value_as_a_number(raw_value)
@@ -67,7 +71,7 @@ module ActiveModel
       end
 
       def parse_raw_value_as_an_integer(raw_value)
-        raw_value.to_i if raw_value.to_s =~ /\A[+-]?\d+\Z/
+        raw_value.to_i if raw_value.to_s =~ /\A[+-]?\d+\z/
       end
 
       def filtered_options(value)
@@ -85,6 +89,13 @@ module ActiveModel
         else
           options[:only_integer]
         end
+      end
+
+      private
+
+      def record_attribute_changed_in_place?(record, attr_name)
+        record.respond_to?(:attribute_changed_in_place?) &&
+          record.attribute_changed_in_place?(attr_name.to_s)
       end
     end
 

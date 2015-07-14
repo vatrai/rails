@@ -1,4 +1,3 @@
-# encoding: utf-8
 
 module InflectorTestCases
   SingularToPlural = {
@@ -141,6 +140,7 @@ module InflectorTestCases
     "HTMLTidyGenerator"     => "html_tidy_generator",
     "FreeBSD"               => "free_bsd",
     "HTML"                  => "html",
+    "ForceXMLController"    => "force_xml_controller",
   }
 
   CamelWithModuleToUnderscoreWithSlash = {

@@ -1,7 +1,7 @@
 require "cases/helper"
 
-class MysqlConsistencyTest < ActiveRecord::TestCase
-  self.use_transactional_fixtures = false
+class MysqlConsistencyTest < ActiveRecord::MysqlTestCase
+  self.use_transactional_tests = false
 
   class Consistency < ActiveRecord::Base
     self.table_name = "mysql_consistency"
@@ -12,6 +12,7 @@ class MysqlConsistencyTest < ActiveRecord::TestCase
     ActiveRecord::ConnectionAdapters::MysqlAdapter.emulate_booleans = false
 
     @connection = ActiveRecord::Base.connection
+    @connection.clear_cache!
     @connection.create_table("mysql_consistency") do |t|
       t.boolean "a_bool"
       t.string "a_string"

@@ -1,12 +1,12 @@
 module ActiveModel
-  # Returns the version of the currently loaded ActiveModel as a <tt>Gem::Version</tt>
+  # Returns the version of the currently loaded \Active \Model as a <tt>Gem::Version</tt>
   def self.gem_version
     Gem::Version.new VERSION::STRING
   end
 
   module VERSION
-    MAJOR = 4
-    MINOR = 2
+    MAJOR = 5
+    MINOR = 0
     TINY  = 0
     PRE   = "alpha"
 

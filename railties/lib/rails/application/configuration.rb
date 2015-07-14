@@ -6,17 +6,17 @@ require 'rails/source_annotation_extractor'
 module Rails
   class Application
     class Configuration < ::Rails::Engine::Configuration
-      attr_accessor :allow_concurrency, :asset_host, :assets, :autoflush_log,
+      attr_accessor :allow_concurrency, :asset_host, :autoflush_log,
                     :cache_classes, :cache_store, :consider_all_requests_local, :console,
                     :eager_load, :exceptions_app, :file_watcher, :filter_parameters,
                     :force_ssl, :helpers_paths, :logger, :log_formatter, :log_tags,
                     :railties_order, :relative_url_root, :secret_key_base, :secret_token,
-                    :serve_static_assets, :ssl_options, :static_cache_control, :session_options,
-                    :time_zone, :reload_classes_only_on_change,
+                    :serve_static_files, :ssl_options, :static_cache_control, :static_index,
+                    :session_options, :time_zone, :reload_classes_only_on_change,
                     :beginning_of_week, :filter_redirect, :x
 
       attr_writer :log_level
-      attr_reader :encoding
+      attr_reader :encoding, :api_only
 
       def initialize(*)
         super
@@ -26,8 +26,9 @@ module Rails
         @filter_parameters             = []
         @filter_redirect               = []
         @helpers_paths                 = []
-        @serve_static_assets           = true
+        @serve_static_files            = true
         @static_cache_control          = nil
+        @static_index                  = "index"
         @force_ssl                     = false
         @ssl_options                   = {}
         @session_store                 = :cookie_store
@@ -48,22 +49,8 @@ module Rails
         @eager_load                    = nil
         @secret_token                  = nil
         @secret_key_base               = nil
+        @api_only                      = false
         @x                             = Custom.new
-
-        @assets = ActiveSupport::OrderedOptions.new
-        @assets.enabled                  = true
-        @assets.paths                    = []
-        @assets.precompile               = [ Proc.new { |path, fn| fn =~ /app\/assets/ && !%w(.js .css).include?(File.extname(path)) },
-                                             /(?:\/|\\|\A)application\.(css|js)$/ ]
-        @assets.prefix                   = "/assets"
-        @assets.version                  = '1.0'
-        @assets.debug                    = false
-        @assets.compile                  = true
-        @assets.digest                   = false
-        @assets.cache_store              = [ :file_store, "#{root}/tmp/cache/assets/#{Rails.env}/" ]
-        @assets.js_compressor            = nil
-        @assets.css_compressor           = nil
-        @assets.logger                   = nil
       end
 
       def encoding=(value)
@@ -72,6 +59,11 @@ module Rails
           Encoding.default_external = value
           Encoding.default_internal = value
         end
+      end
+
+      def api_only=(value)
+        @api_only = value
+        generators.api_only = value
       end
 
       def paths
@@ -93,9 +85,10 @@ module Rails
       # Loads and returns the entire raw configuration of database from
       # values stored in `config/database.yml`.
       def database_configuration
-        yaml = Pathname.new(paths["config/database"].existent.first || "")
+        path = paths["config/database"].existent.first
+        yaml = Pathname.new(path) if path
 
-        config = if yaml.exist?
+        config = if yaml && yaml.exist?
           require "yaml"
           require "erb"
           YAML.load(ERB.new(yaml.read).result) || {}
@@ -104,7 +97,7 @@ module Rails
           # by Active Record.
           {}
         else
-          raise "Could not load database configuration. No such file - #{yaml}"
+          raise "Could not load database configuration. No such file - #{paths["config/database"].instance_variable_get(:@paths)}"
         end
 
         config
@@ -117,7 +110,7 @@ module Rails
       end
 
       def log_level
-        @log_level ||= :debug
+        @log_level ||= (Rails.env.production? ? :info : :debug)
       end
 
       def colorize_logging

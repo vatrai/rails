@@ -1,4 +1,3 @@
-# encoding: utf-8
 require "cases/helper"
 require 'models/topic'
 require 'models/reply'
@@ -30,18 +29,28 @@ class ReplyWithTitleObject < Reply
   def title; ReplyTitle.new; end
 end
 
-class Employee < ActiveRecord::Base
-  self.table_name = 'postgresql_arrays'
-  validates_uniqueness_of :nicknames
-end
-
 class TopicWithUniqEvent < Topic
   belongs_to :event, foreign_key: :parent_id
   validates :event, uniqueness: true
 end
 
+class BigIntTest < ActiveRecord::Base
+  INT_MAX_VALUE = 2147483647
+  self.table_name = 'cars'
+  validates :engines_count, uniqueness: true, inclusion: { in: 0..INT_MAX_VALUE }
+end
+
+class BigIntReverseTest < ActiveRecord::Base
+  INT_MAX_VALUE = 2147483647
+  self.table_name = 'cars'
+  validates :engines_count, inclusion: { in: 0..INT_MAX_VALUE }
+  validates :engines_count, uniqueness: true
+end
+
 class UniquenessValidationTest < ActiveRecord::TestCase
-  fixtures :topics, 'warehouse-things', :developers
+  INT_MAX_VALUE = 2147483647
+
+  fixtures :topics, 'warehouse-things'
 
   repair_validations(Topic, Reply)
 
@@ -90,6 +99,16 @@ class UniquenessValidationTest < ActiveRecord::TestCase
     t2 = Topic.new('title' => 'abc')
     assert !t2.valid?
     assert t2.errors[:title]
+  end
+
+  def test_validate_uniqueness_when_integer_out_of_range
+    entry = BigIntTest.create(engines_count: INT_MAX_VALUE + 1)
+    assert_equal entry.errors[:engines_count], ['is not included in the list']
+  end
+
+  def test_validate_uniqueness_when_integer_out_of_range_show_order_does_not_matter
+    entry = BigIntReverseTest.create(engines_count: INT_MAX_VALUE + 1)
+    assert_equal entry.errors[:engines_count], ['is not included in the list']
   end
 
   def test_validates_uniqueness_with_newline_chars
@@ -378,18 +397,6 @@ class UniquenessValidationTest < ActiveRecord::TestCase
     }
   end
 
-  if current_adapter? :PostgreSQLAdapter
-    def test_validate_uniqueness_with_array_column
-      e1 = Employee.create("nicknames" => ["john", "johnny"], "commission_by_quarter" => [1000, 1200])
-      assert e1.persisted?, "Saving e1"
-
-      e2 = Employee.create("nicknames" => ["john", "johnny"], "commission_by_quarter" => [2200])
-      assert !e2.persisted?, "e2 shouldn't be valid"
-      assert e2.errors[:nicknames].any?, "Should have errors for nicknames"
-      assert_equal ["has already been taken"], e2.errors[:nicknames], "Should have uniqueness message for nicknames"
-    end
-  end
-
   def test_validate_uniqueness_on_existing_relation
     event = Event.create
     assert TopicWithUniqEvent.create(event: event).valid?
@@ -401,6 +408,23 @@ class UniquenessValidationTest < ActiveRecord::TestCase
 
   def test_validate_uniqueness_on_empty_relation
     topic = TopicWithUniqEvent.new
+    assert topic.valid?
+  end
+
+  def test_does_not_validate_uniqueness_of_if_parent_record_is_validate_false
+    Reply.validates_uniqueness_of(:content)
+
+    Reply.create!(content: "Topic Title")
+
+    reply = Reply.new(content: "Topic Title")
+    reply.save!(validate: false)
+    assert reply.persisted?
+
+    topic = Topic.new(reply_ids: [reply.id])
+    topic.save!
+
+    assert_equal topic.replies.size, 1
+    assert reply.valid?
     assert topic.valid?
   end
 end

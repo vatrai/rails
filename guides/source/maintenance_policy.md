@@ -1,3 +1,5 @@
+**DO NOT READ THIS FILE ON GITHUB, GUIDES ARE PUBLISHED ON http://guides.rubyonrails.org.**
+
 Maintenance Policy for Ruby on Rails
 ====================================
 
@@ -39,7 +41,10 @@ Only the latest release series will receive bug fixes. When enough bugs are
 fixed and its deemed worthy to release a new gem, this is the branch it happens
 from.
 
-**Currently included series:** `4.1.Z`, `4.0.Z`.
+In special situations, where someone from the Core Team agrees to support more series,
+they are included in the list of supported series.
+
+**Currently included series:** `4.2.Z`, `4.1.Z` (Supported by Rafael França).
 
 Security Issues
 ---------------
@@ -54,7 +59,7 @@ be built from 1.2.2, and then added to the end of 1-2-stable. This means that
 security releases are easy to upgrade to if you're running the latest version
 of Rails.
 
-**Currently included series:** `4.1.Z`, `4.0.Z`.
+**Currently included series:** `4.2.Z`, `4.1.Z`.
 
 Severe Security Issues
 ----------------------
@@ -63,7 +68,7 @@ For severe security issues we will provide new versions as above, and also the
 last major release series will receive patches and new versions. The
 classification of the security issue is judged by the core team.
 
-**Currently included series:** `4.1.Z`, `4.0.Z`, `3.2.Z`.
+**Currently included series:** `4.2.Z`, `4.1.Z`, `3.2.Z`.
 
 Unsupported Release Series
 --------------------------

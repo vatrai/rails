@@ -2,23 +2,6 @@ require 'cases/helper'
 require 'models/contact'
 require 'active_support/core_ext/object/instance_variables'
 
-class Contact
-  include ActiveModel::Serializers::JSON
-  include ActiveModel::Validations
-
-  def attributes=(hash)
-    hash.each do |k, v|
-      instance_variable_set("@#{k}", v)
-    end
-  end
-
-  remove_method :attributes if method_defined?(:attributes)
-
-  def attributes
-    instance_values
-  end
-end
-
 class JsonSerializationTest < ActiveModel::TestCase
   def setup
     @contact = Contact.new
@@ -211,5 +194,9 @@ class JsonSerializationTest < ActiveModel::TestCase
     assert_no_match %r{"created_at":#{ActiveSupport::JSON.encode(Time.utc(2006, 8, 1))}}, json
     assert_no_match %r{"awesome":}, json
     assert_no_match %r{"preferences":}, json
+  end
+
+  test "Class.model_name should be json encodable" do
+    assert_match %r{"Contact"}, Contact.model_name.to_json
   end
 end

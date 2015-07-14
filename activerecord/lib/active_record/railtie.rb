@@ -36,8 +36,6 @@ module ActiveRecord
     config.eager_load_namespaces << ActiveRecord
 
     rake_tasks do
-      require "active_record/base"
-
       namespace :db do
         task :load_config do
           ActiveRecord::Tasks::DatabaseTasks.database_configuration = Rails.application.config.database_configuration
@@ -95,11 +93,20 @@ module ActiveRecord
               cache = Marshal.load File.binread filename
               if cache.version == ActiveRecord::Migrator.current_version
                 self.connection.schema_cache = cache
+                self.connection_pool.schema_cache = cache.dup
               else
                 warn "Ignoring db/schema_cache.dump because it has expired. The current schema version is #{ActiveRecord::Migrator.current_version}, but the one in the cache is #{cache.version}."
               end
             end
           end
+        end
+      end
+    end
+
+    initializer "active_record.warn_on_records_fetched_greater_than" do
+      if config.active_record.warn_on_records_fetched_greater_than
+        ActiveSupport.on_load(:active_record) do
+          require 'active_record/relation/record_fetch_warning'
         end
       end
     end
@@ -149,8 +156,8 @@ end_warning
       ActiveSupport.on_load(:active_record) do
         ActionDispatch::Reloader.send(hook) do
           if ActiveRecord::Base.connected?
-            ActiveRecord::Base.clear_reloadable_connections!
             ActiveRecord::Base.clear_cache!
+            ActiveRecord::Base.clear_reloadable_connections!
           end
         end
       end

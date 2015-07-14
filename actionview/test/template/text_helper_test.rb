@@ -1,4 +1,3 @@
-# encoding: utf-8
 require 'abstract_unit'
 
 class TextHelperTest < ActionView::TestCase
@@ -193,6 +192,10 @@ class TextHelperTest < ActionView::TestCase
     assert_equal '   ', highlight('   ', 'blank text is returned verbatim')
   end
 
+  def test_highlight_should_return_blank_string_for_nil
+    assert_equal '', highlight(nil, 'blank string is returned for nil')
+  end
+
   def test_highlight_should_sanitize_input
     assert_equal(
       "This is a <mark>beautiful</mark> morning",
@@ -378,6 +381,18 @@ class TextHelperTest < ActionView::TestCase
     assert_equal("10 buffaloes", pluralize(10, "buffalo"))
     assert_equal("1 berry", pluralize(1, "berry"))
     assert_equal("12 berries", pluralize(12, "berry"))
+  end
+
+  def test_pluralization_with_locale
+    ActiveSupport::Inflector.inflections(:de) do |inflect|
+      inflect.plural(/(person)$/i, '\1en')
+      inflect.singular(/(person)en$/i, '\1')
+    end
+
+    assert_equal("2 People", pluralize(2, "Person", locale: :en))
+    assert_equal("2 Personen", pluralize(2, "Person", locale: :de))
+
+    ActiveSupport::Inflector.inflections(:de).clear
   end
 
   def test_cycle_class

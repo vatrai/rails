@@ -13,6 +13,14 @@ module ActiveRecord
         @tables       = {}
       end
 
+      def initialize_dup(other)
+        super
+        @columns      = @columns.dup
+        @columns_hash = @columns_hash.dup
+        @primary_keys = @primary_keys.dup
+        @tables       = @tables.dup
+      end
+
       def primary_keys(table_name)
         @primary_keys[table_name] ||= table_exists?(table_name) ? connection.primary_key(table_name) : nil
       end
@@ -61,9 +69,7 @@ module ActiveRecord
       end
 
       def size
-        [@columns, @columns_hash, @primary_keys, @tables].map { |x|
-          x.size
-        }.inject :+
+        [@columns, @columns_hash, @primary_keys, @tables].map(&:size).inject :+
       end
 
       # Clear out internal caches for table with +table_name+.

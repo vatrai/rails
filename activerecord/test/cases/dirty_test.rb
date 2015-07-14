@@ -165,18 +165,6 @@ class DirtyTest < ActiveRecord::TestCase
     assert_equal parrot.name_change, parrot.title_change
   end
 
-  def test_reset_attribute!
-    pirate = Pirate.create!(:catchphrase => 'Yar!')
-    pirate.catchphrase = 'Ahoy!'
-
-    assert_deprecated do
-      pirate.reset_catchphrase!
-    end
-    assert_equal "Yar!", pirate.catchphrase
-    assert_equal Hash.new, pirate.changes
-    assert !pirate.catchphrase_changed?
-  end
-
   def test_restore_attribute!
     pirate = Pirate.create!(:catchphrase => 'Yar!')
     pirate.catchphrase = 'Ahoy!'
@@ -635,32 +623,6 @@ class DirtyTest < ActiveRecord::TestCase
     end
   end
 
-  test "defaults with type that implements `type_cast_for_database`" do
-    type = Class.new(ActiveRecord::Type::Value) do
-      def type_cast(value)
-        value.to_i
-      end
-
-      def type_cast_for_database(value)
-        value.to_s
-      end
-    end
-
-    model_class = Class.new(ActiveRecord::Base) do
-      self.table_name = 'numeric_data'
-      attribute :foo, type.new, default: 1
-    end
-
-    model = model_class.new
-    assert_not model.foo_changed?
-
-    model = model_class.new(foo: 1)
-    assert_not model.foo_changed?
-
-    model = model_class.new(foo: '1')
-    assert_not model.foo_changed?
-  end
-
   test "in place mutation detection" do
     pirate = Pirate.create!(catchphrase: "arrrr")
     pirate.catchphrase << " matey!"
@@ -680,6 +642,81 @@ class DirtyTest < ActiveRecord::TestCase
 
     assert_equal "arrrr matey!", pirate.catchphrase
     assert_not pirate.changed?
+  end
+
+  test "in place mutation for binary" do
+    klass = Class.new(ActiveRecord::Base) do
+      self.table_name = :binaries
+      serialize :data
+    end
+
+    binary = klass.create!(data: "\\\\foo")
+
+    assert_not binary.changed?
+
+    binary.data = binary.data.dup
+
+    assert_not binary.changed?
+
+    binary = klass.last
+
+    assert_not binary.changed?
+
+    binary.data << "bar"
+
+    assert binary.changed?
+  end
+
+  test "attribute_changed? doesn't compute in-place changes for unrelated attributes" do
+    test_type_class = Class.new(ActiveRecord::Type::Value) do
+      define_method(:changed_in_place?) do |*|
+        raise
+      end
+    end
+    klass = Class.new(ActiveRecord::Base) do
+      self.table_name = 'people'
+      attribute :foo, test_type_class.new
+    end
+
+    model = klass.new(first_name: "Jim")
+    assert model.first_name_changed?
+  end
+
+  test "attribute_will_change! doesn't try to save non-persistable attributes" do
+    klass = Class.new(ActiveRecord::Base) do
+      self.table_name = 'people'
+      attribute :non_persisted_attribute, :string
+    end
+
+    record = klass.new(first_name: "Sean")
+    record.non_persisted_attribute_will_change!
+
+    assert record.non_persisted_attribute_changed?
+    assert record.save
+  end
+
+  test "mutating and then assigning doesn't remove the change" do
+    pirate = Pirate.create!(catchphrase: "arrrr")
+    pirate.catchphrase << " matey!"
+    pirate.catchphrase = "arrrr matey!"
+
+    assert pirate.catchphrase_changed?(from: "arrrr", to: "arrrr matey!")
+  end
+
+  test "getters with side effects are allowed" do
+    klass = Class.new(Pirate) do
+      def catchphrase
+        if super.blank?
+          update_attribute(:catchphrase, "arr") # what could possibly go wrong?
+        end
+        super
+      end
+    end
+
+    pirate = klass.create!(catchphrase: "lol")
+    pirate.update_attribute(:catchphrase, nil)
+
+    assert_equal "arr", pirate.catchphrase
   end
 
   private

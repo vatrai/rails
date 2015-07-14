@@ -7,7 +7,6 @@ require 'active_support/core_ext/module/remove_method'
 require 'active_support/inflector'
 require 'action_dispatch/routing/redirection'
 require 'action_dispatch/routing/endpoint'
-require 'active_support/deprecation'
 
 module ActionDispatch
   module Routing
@@ -241,16 +240,12 @@ module ActionDispatch
           end
 
           def app(blocks)
-            return to if Redirect === to
-
             if to.respond_to?(:call)
               Constraints.new(to, blocks, false)
+            elsif blocks.any?
+              Constraints.new(dispatcher(defaults), blocks, true)
             else
-              if blocks.any?
-                Constraints.new(dispatcher(defaults), blocks, true)
-              else
-                dispatcher(defaults)
-              end
+              dispatcher(defaults)
             end
           end
 
@@ -282,14 +277,8 @@ module ActionDispatch
           end
 
           def split_to(to)
-            case to
-            when Symbol
-              ActiveSupport::Deprecation.warn "defining a route where `to` is a symbol is deprecated.  Please change \"to: :#{to}\" to \"action: :#{to}\""
-              [nil, to.to_s]
-            when /#/    then to.split('#')
-            when String
-              ActiveSupport::Deprecation.warn "defining a route where `to` is a controller without an action is deprecated.  Please change \"to: :#{to}\" to \"controller: :#{to}\""
-              [to, nil]
+            if to =~ /#/
+              to.split('#')
             else
               []
             end
@@ -384,7 +373,7 @@ module ActionDispatch
 
         # Matches a url pattern to one or more routes.
         #
-        # You should not use the `match` method in your router
+        # You should not use the +match+ method in your router
         # without specifying an HTTP method.
         #
         # If you want to expose your action to both GET and POST, use:
@@ -395,7 +384,7 @@ module ActionDispatch
         # Note that +:controller+, +:action+ and +:id+ are interpreted as url
         # query parameters and thus available through +params+ in an action.
         #
-        # If you want to expose your action to GET, use `get` in the router:
+        # If you want to expose your action to GET, use +get+ in the router:
         #
         # Instead of:
         #
@@ -429,14 +418,14 @@ module ActionDispatch
         # A pattern can also point to a +Rack+ endpoint i.e. anything that
         # responds to +call+:
         #
-        #   match 'photos/:id', to: lambda {|hash| [200, {}, ["Coming soon"]] }, via: :get
+        #   match 'photos/:id', to: -> (hash) { [200, {}, ["Coming soon"]] }, via: :get
         #   match 'photos/:id', to: PhotoRackApp, via: :get
         #   # Yes, controller actions are just rack endpoints
         #   match 'photos/:id', to: PhotosController.action(:show), via: :get
         #
         # Because requesting various HTTP verbs with a single action has security
         # implications, you must either specify the actions in
-        # the via options or use one of the HtttpHelpers[rdoc-ref:HttpHelpers]
+        # the via options or use one of the HttpHelpers[rdoc-ref:HttpHelpers]
         # instead +match+
         #
         # === Options
@@ -450,7 +439,7 @@ module ActionDispatch
         #   The route's action.
         #
         # [:param]
-        #   Overrides the default resource identifier `:id` (name of the
+        #   Overrides the default resource identifier +:id+ (name of the
         #   dynamic segment used to generate the routes).
         #   You can access that segment from your controller using
         #   <tt>params[<:param>]</tt>.
@@ -481,7 +470,7 @@ module ActionDispatch
         #   +call+ or a string representing a controller's action.
         #
         #      match 'path', to: 'controller#action', via: :get
-        #      match 'path', to: lambda { |env| [200, {}, ["Success!"]] }, via: :get
+        #      match 'path', to: -> (env) { [200, {}, ["Success!"]] }, via: :get
         #      match 'path', to: RackApp, via: :get
         #
         # [:on]
@@ -575,13 +564,7 @@ module ActionDispatch
           raise "A rack application must be specified" unless path
 
           rails_app = rails_app? app
-
-          if rails_app
-            options[:as]  ||= app.railtie_name
-          else
-            # non rails apps can't have an :as
-            options[:as]  = nil
-          end
+          options[:as] ||= app_name(app, rails_app)
 
           target_as       = name_for_action(options[:as], path)
           options[:via] ||= :all
@@ -611,6 +594,15 @@ module ActionDispatch
         private
           def rails_app?(app)
             app.is_a?(Class) && app < Rails::Railtie
+          end
+
+          def app_name(app, rails_app)
+            if rails_app
+              app.railtie_name
+            elsif app.is_a?(Class)
+              class_name = app.name
+              ActiveSupport::Inflector.underscore(class_name).tr("/", "_")
+            end
           end
 
           def define_generate_prefix(app, name)
@@ -814,7 +806,7 @@ module ActionDispatch
         # Scopes routes to a specific controller
         #
         #   controller "food" do
-        #     match "bacon", action: "bacon"
+        #     match "bacon", action: :bacon, via: :get
         #   end
         def controller(controller, options={})
           options[:controller] = controller
@@ -907,7 +899,7 @@ module ActionDispatch
         #
         # Requests to routes can be constrained based on specific criteria:
         #
-        #    constraints(lambda { |req| req.env["HTTP_USER_AGENT"] =~ /iPhone/ }) do
+        #    constraints(-> (req) { req.env["HTTP_USER_AGENT"] =~ /iPhone/ }) do
         #      resources :iphones
         #    end
         #
@@ -1050,7 +1042,7 @@ module ActionDispatch
         class Resource #:nodoc:
           attr_reader :controller, :path, :options, :param
 
-          def initialize(entities, options = {})
+          def initialize(entities, api_only = false, options = {})
             @name       = entities.to_s
             @path       = (options[:path] || @name).to_s
             @controller = (options[:controller] || @name).to_s
@@ -1058,10 +1050,15 @@ module ActionDispatch
             @param      = (options[:param] || :id).to_sym
             @options    = options
             @shallow    = false
+            @api_only   = api_only
           end
 
           def default_actions
-            [:index, :create, :new, :show, :update, :destroy, :edit]
+            if @api_only
+              [:index, :create, :show, :update, :destroy]
+            else
+              [:index, :create, :new, :show, :update, :destroy, :edit]
+            end
           end
 
           def actions
@@ -1128,7 +1125,7 @@ module ActionDispatch
         end
 
         class SingletonResource < Resource #:nodoc:
-          def initialize(entities, options)
+          def initialize(entities, api_only, options)
             super
             @as         = nil
             @controller = (options[:controller] || plural).to_s
@@ -1136,7 +1133,11 @@ module ActionDispatch
           end
 
           def default_actions
-            [:show, :create, :update, :destroy, :new, :edit]
+            if @api_only
+              [:show, :create, :update, :destroy]
+            else
+              [:show, :create, :update, :destroy, :new, :edit]
+            end
           end
 
           def plural
@@ -1186,7 +1187,7 @@ module ActionDispatch
             return self
           end
 
-          resource_scope(:resource, SingletonResource.new(resources.pop, options)) do
+          resource_scope(:resource, SingletonResource.new(resources.pop, api_only?, options)) do
             yield if block_given?
 
             concerns(options[:concerns]) if options[:concerns]
@@ -1344,7 +1345,7 @@ module ActionDispatch
             return self
           end
 
-          resource_scope(:resources, Resource.new(resources.pop, options)) do
+          resource_scope(:resources, Resource.new(resources.pop, api_only?, options)) do
             yield if block_given?
 
             concerns(options[:concerns]) if options[:concerns]
@@ -1458,9 +1459,12 @@ module ActionDispatch
           parent_resource.instance_of?(Resource) && @scope[:shallow]
         end
 
-        # match 'path' => 'controller#action'
-        # match 'path', to: 'controller#action'
-        # match 'path', 'otherpath', on: :member, via: :get
+        # Matches a url pattern to one or more routes.
+        # For more information, see match[rdoc-ref:Base#match].
+        #
+        #   match 'path' => 'controller#action', via: patch
+        #   match 'path', to: 'controller#action', via: :post
+        #   match 'path', 'otherpath', on: :member, via: :get
         def match(path, *rest)
           if rest.empty? && Hash === path
             options  = path
@@ -1512,7 +1516,7 @@ module ActionDispatch
         end
 
         def using_match_shorthand?(path, options)
-          path && (options[:to] || options[:action]).nil? && path =~ %r{/[\w/]+$}
+          path && (options[:to] || options[:action]).nil? && path =~ %r{^/?[-\w]+/[-\w/]+$}
         end
 
         def decomposed_match(path, options) # :nodoc:
@@ -1686,7 +1690,7 @@ module ActionDispatch
           end
 
           def shallow_nesting_depth #:nodoc:
-            @nesting.select(&:shallow?).size
+            @nesting.count(&:shallow?)
           end
 
           def param_constraint? #:nodoc:
@@ -1747,9 +1751,10 @@ module ActionDispatch
               member_name = parent_resource.member_name
             end
 
-            name = @scope.action_name(name_prefix, prefix, collection_name, member_name)
+            action_name = @scope.action_name(name_prefix, prefix, collection_name, member_name)
+            candidate = action_name.select(&:present?).join('_')
 
-            if candidate = name.compact.join("_").presence
+            unless candidate.empty?
               # If a name was not explicitly given, we check if it is valid
               # and return nil in case it isn't. Otherwise, we pass the invalid name
               # forward so the underlying router engine treats it and raises an exception.
@@ -1771,6 +1776,10 @@ module ActionDispatch
               end
               delete :destroy if parent_resource.actions.include?(:destroy)
             end
+          end
+
+          def api_only?
+            @set.api_only?
           end
       end
 

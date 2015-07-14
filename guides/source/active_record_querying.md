@@ -1,3 +1,5 @@
+**DO NOT READ THIS FILE ON GITHUB, GUIDES ARE PUBLISHED ON http://guides.rubyonrails.org.**
+
 Active Record Query Interface
 =============================
 
@@ -9,6 +11,7 @@ After reading this guide, you will know:
 * How to specify the order, retrieved attributes, grouping, and other properties of the found records.
 * How to use eager loading to reduce the number of database queries needed for data retrieval.
 * How to use dynamic finders methods.
+* How to use method chaining to use multiple ActiveRecord methods together.
 * How to check for the existence of particular records.
 * How to perform various calculations on Active Record models.
 * How to run EXPLAIN on relations.
@@ -87,7 +90,7 @@ The primary operation of `Model.find(options)` can be summarized as:
 * Convert the supplied options to an equivalent SQL query.
 * Fire the SQL query and retrieve the corresponding results from the database.
 * Instantiate the equivalent Ruby object of the appropriate model for every resulting row.
-* Run `after_find` callbacks, if any.
+* Run `after_find` and then `after_initialize` callbacks, if any.
 
 ### Retrieving a Single Object
 
@@ -254,6 +257,12 @@ It is equivalent to writing:
 Client.where(first_name: 'Lifo').take
 ```
 
+The SQL equivalent of the above is:
+
+```sql
+SELECT * FROM clients WHERE (clients.first_name = 'Lifo') LIMIT 1
+```
+
 The `find_by!` method behaves exactly like `find_by`, except that it will raise `ActiveRecord::RecordNotFound` if no matching record is found. For example:
 
 ```ruby
@@ -308,7 +317,7 @@ end
 
 The `find_each` method accepts most of the options allowed by the regular `find` method, except for `:order` and `:limit`, which are reserved for internal use by `find_each`.
 
-Two additional options, `:batch_size` and `:start`, are available as well.
+Three additional options, `:batch_size`, `:begin_at` and `:end_at`, are available as well.
 
 **`:batch_size`**
 
@@ -320,19 +329,32 @@ User.find_each(batch_size: 5000) do |user|
 end
 ```
 
-**`:start`**
+**`:begin_at`**
 
-By default, records are fetched in ascending order of the primary key, which must be an integer. The `:start` option allows you to configure the first ID of the sequence whenever the lowest ID is not the one you need. This would be useful, for example, if you wanted to resume an interrupted batch process, provided you saved the last processed ID as a checkpoint.
+By default, records are fetched in ascending order of the primary key, which must be an integer. The `:begin_at` option allows you to configure the first ID of the sequence whenever the lowest ID is not the one you need. This would be useful, for example, if you wanted to resume an interrupted batch process, provided you saved the last processed ID as a checkpoint.
 
 For example, to send newsletters only to users with the primary key starting from 2000, and to retrieve them in batches of 5000:
 
 ```ruby
-User.find_each(start: 2000, batch_size: 5000) do |user|
+User.find_each(begin_at: 2000, batch_size: 5000) do |user|
   NewsMailer.weekly(user).deliver_now
 end
 ```
 
-Another example would be if you wanted multiple workers handling the same processing queue. You could have each worker handle 10000 records by setting the appropriate `:start` option on each worker.
+Another example would be if you wanted multiple workers handling the same processing queue. You could have each worker handle 10000 records by setting the appropriate `:begin_at` option on each worker.
+
+**`:end_at`**
+
+Similar to the `:begin_at` option, `:end_at` allows you to configure the last ID of the sequence whenever the highest ID is not the one you need.
+This would be useful, for example, if you wanted to run a batch process, using a subset of records based on `:begin_at` and `:end_at`
+
+For example, to send newsletters only to users with the primary key starting from 2000 up to 10000 and to retrieve them in batches of 5000:
+
+```ruby
+User.find_each(begin_at: 2000, end_at: 10000, batch_size: 5000) do |user|
+  NewsMailer.weekly(user).deliver_now
+end
+```
 
 #### `find_in_batches`
 
@@ -340,16 +362,14 @@ The `find_in_batches` method is similar to `find_each`, since both retrieve batc
 
 ```ruby
 # Give add_invoices an array of 1000 invoices at a time
-Invoice.find_in_batches(include: :invoice_lines) do |invoices|
+Invoice.find_in_batches do |invoices|
   export.add_invoices(invoices)
 end
 ```
 
-NOTE: The `:include` option allows you to name associations that should be loaded alongside with the models.
-
 ##### Options for `find_in_batches`
 
-The `find_in_batches` method accepts the same `:batch_size` and `:start` options as `find_each`, as well as most of the options allowed by the regular `find` method, except for `:order` and `:limit`, which are reserved for internal use by `find_in_batches`.
+The `find_in_batches` method accepts the same `:batch_size`, `:begin_at` and `:end_at` options as `find_each`.
 
 Conditions
 ----------
@@ -509,7 +529,7 @@ Client.order("orders_count ASC, created_at DESC")
 Client.order("orders_count ASC", "created_at DESC")
 ```
 
-If you want to call `order` multiple times e.g. in different context, new order will append previous one
+If you want to call `order` multiple times e.g. in different context, new order will append previous one:
 
 ```ruby
 Client.order("orders_count ASC").order("created_at DESC")
@@ -635,7 +655,7 @@ GROUP BY status
 Having
 ------
 
-SQL uses the `HAVING` clause to specify conditions on the `GROUP BY` fields. You can add the `HAVING` clause to the SQL fired by the `Model.find` by adding the `:having` option to the find.
+SQL uses the `HAVING` clause to specify conditions on the `GROUP BY` fields. You can add the `HAVING` clause to the SQL fired by the `Model.find` by adding the `having` method to the find.
 
 For example:
 
@@ -878,7 +898,7 @@ For example:
 Item.transaction do
   i = Item.lock.first
   i.name = 'Jones'
-  i.save
+  i.save!
 end
 ```
 
@@ -1127,7 +1147,7 @@ This would generate a query which contains a `LEFT OUTER JOIN` whereas the
 If there was no `where` condition, this would generate the normal set of two queries.
 
 NOTE: Using `where` like this will only work when you pass it a Hash. For
-SQL-fragments you need use `references` to force joined tables:
+SQL-fragments you need to use `references` to force joined tables:
 
 ```ruby
 Article.includes(:comments).where("comments.visible = true").references(:comments)
@@ -1268,7 +1288,7 @@ User.active.where(state: 'finished')
 # SELECT "users".* FROM "users" WHERE "users"."state" = 'active' AND "users"."state" = 'finished'
 ```
 
-If we do want the `last where clause` to win then `Relation#merge` can
+If we do want the last `where` clause to win then `Relation#merge` can
 be used.
 
 ```ruby
@@ -1323,19 +1343,72 @@ Client.unscoped {
 Dynamic Finders
 ---------------
 
-For every field (also known as an attribute) you define in your table, Active Record provides a finder method. If you have a field called `first_name` on your `Client` model for example, you get `find_by_first_name` for free from Active Record. If you have a `locked` field on the `Client` model, you also get `find_by_locked` and methods.
+For every field (also known as an attribute) you define in your table, Active Record provides a finder method. If you have a field called `first_name` on your `Client` model for example, you get `find_by_first_name` for free from Active Record. If you have a `locked` field on the `Client` model, you also get `find_by_locked` method.
 
 You can specify an exclamation point (`!`) on the end of the dynamic finders to get them to raise an `ActiveRecord::RecordNotFound` error if they do not return any records, like `Client.find_by_name!("Ryan")`
 
 If you want to find both by name and locked, you can chain these finders together by simply typing "`and`" between the fields. For example, `Client.find_by_first_name_and_locked("Ryan", true)`.
 
+Understanding The Method Chaining
+---------------------------------
+
+The Active Record pattern implements [Method Chaining](http://en.wikipedia.org/wiki/Method_chaining),
+which allow us to use multiple Active Record methods together in a simple and straightforward way.
+
+You can chain methods in a statement when the previous method called returns an
+`ActiveRecord::Relation`, like `all`, `where`, and `joins`. Methods that return
+a single object (see [Retrieving a Single Object Section](#retrieving-a-single-object))
+have to be at the end of the statement.
+
+There are some examples below. This guide won't cover all the possibilities, just a few as examples.
+When an Active Record method is called, the query is not immediately generated and sent to the database,
+this just happens when the data is actually needed. So each example below generates a single query.
+
+### Retrieving filtered data from multiple tables
+
+```ruby
+Person
+  .select('people.id, people.name, comments.text')
+  .joins(:comments)
+  .where('comments.created_at > ?', 1.week.ago)
+```
+
+The result should be something like this:
+
+```sql
+SELECT people.id, people.name, comments.text
+FROM people
+INNER JOIN comments
+  ON comments.person_id = people.id
+WHERE comments.created_at = '2015-01-01'
+```
+
+### Retrieving specific data from multiple tables
+
+```ruby
+Person
+  .select('people.id, people.name, companies.name')
+  .joins(:company)
+  .find_by('people.name' => 'John') # this should be the last
+```
+
+The above should generate:
+
+```sql
+SELECT people.id, people.name, companies.name
+FROM people
+INNER JOIN companies
+  ON companies.person_id = people.id
+WHERE people.name = 'John'
+LIMIT 1
+```
+
+NOTE: Note that if a query matches multiple records, `find_by` will
+fetch only the first one and ignore the others (see the `LIMIT 1`
+statement above).
+
 Find or Build a New Object
 --------------------------
-
-NOTE: Some dynamic finders have been deprecated in Rails 4.0 and will be
-removed in Rails 4.1. The best practice is to use Active Record scopes
-instead. You can find the deprecation gem at
-https://github.com/rails/activerecord-deprecated_finders
 
 It's common that you need to find a record or create it if it doesn't exist. You can do that with the `find_or_create_by` and `find_or_create_by!` methods.
 
@@ -1714,8 +1787,9 @@ EXPLAIN for: SELECT `users`.* FROM `users` INNER JOIN `articles` ON `articles`.`
 
 under MySQL.
 
-Active Record performs a pretty printing that emulates the one of the database
-shells. So, the same query running with the PostgreSQL adapter would yield instead
+Active Record performs a pretty printing that emulates that of the
+corresponding database shell. So, the same query running with the
+PostgreSQL adapter would yield instead
 
 ```
 EXPLAIN for: SELECT "users".* FROM "users" INNER JOIN "articles" ON "articles"."user_id" = "users"."id" WHERE "users"."id" = 1

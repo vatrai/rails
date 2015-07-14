@@ -1,154 +1,212 @@
-*   The [web-console](https://github.com/rails/web-console) gem is now
-    installed by default for new applications. It can help you debug
-    development exceptions by spawnig an interactive console in its cause
-    binding.
+*   Fix `NoMethodError` when generating a scaffold inside a full engine.
 
-    *Ryan Dao*, *Genadi Samokovarov*, *Guillermo Iguaran*
+    *Yuji Yaginuma*
 
-*   Add a `required` option to the model generator for associations
+*   Adding support for passing a block to the `add_source` action of a custom generator
 
-    *Sean Griffin*
+    *Mike Dalton*, *Hirofumi Wakasugi*
 
-*   Add `after_bundle` callbacks in Rails templates. Useful for allowing the
-    generated binstubs to be added to version control.
+*   `assert_file` understands paths with special characters
+    (eg. `v0.1.4~alpha+nightly`).
 
-    Fixes #16292.
+    *Diego Carrion*
 
-    *Stefan Kanev*
+*   Remove ContentLength middleware from the defaults.  If you want it, just
+    add it as a middleware in your config.
 
-*   Pull in the custom configuration concept from dhh/custom_configuration, which allows you to
-    configure your own code through the Rails configuration object with custom configuration:
+    *Egg McMuffin*
 
-        # config/environments/production.rb
-        config.x.payment_processing.schedule = :daily
-        config.x.payment_processing.retries  = 3
-        config.x.super_debugger              = true
-
-    These configuration points are then available through the configuration object:
-
-        Rails.configuration.x.payment_processing.schedule # => :daily
-        Rails.configuration.x.payment_processing.retries  # => 3
-        Rails.configuration.x.super_debugger              # => true
-
-    *DHH*
-
-*   Scaffold generator `_form` partial adds `class="field"` for password
-    confirmation fields.
-
-    *noinkling*
-
-*   Add `Rails::Application.config_for` to load a configuration for the current
-    environment.
-
-        # config/exception_notification.yml:
-        production:
-          url: http://127.0.0.1:8080
-          namespace: my_app_production
-        development:
-          url: http://localhost:3001
-          namespace: my_app_development
-
-        # config/production.rb
-        MyApp::Application.configure do
-          config.middleware.use ExceptionNotifier, config_for(:exception_notification)
-        end
-
-    *Rafael Mendonça França*, *DHH*
-
-*   Deprecate `Rails::Rack::LogTailer` without replacement.
-
-    *Rafael Mendonça França*
-
-*   Add a generic --skip-gems options to generator
-
-    This option is useful if users want to remove some gems like jbuilder,
-    turbolinks, coffee-rails, etc that don't have specific options on the
-    generator.
-
-        rails new my_app --skip-gems turbolinks coffee-rails
-
-    *Rafael Mendonça França*
-
-*   Invalid `bin/rails generate` commands will now show spelling suggestions.
-
-    *Richard Schneeman*
-
-*   Add `bin/setup` script to bootstrap an application.
+*   Make it possible to customize the executable inside rerun snippets.
 
     *Yves Senn*
 
-*   Replace double quotes with single quotes while adding an entry into Gemfile.
+*   Add support for API only apps.
+    Middleware stack was slimmed down and it has only the needed
+    middleware for API apps & generators generates the right files,
+    folders and configurations.
 
-    *Alexander Belaev*
+    *Santiago Pastorino & Jorge Bejar*
 
-*   Default `config.assets.digest` to `true` in development.
+*   Make generated scaffold functional tests work inside engines.
 
-    *Dan Kang*
+    *Yuji Yaginuma*
 
-*   Load database configuration from the first `database.yml` available in paths.
+*   Generator a `.keep` file in the `tmp` folder by default as many scripts
+    assume the existence of this folder and most would fail if it is absent.
 
-    *Pier-Olivier Thibault*
+    See #20299.
 
-*   Reading name and email from git for plugin gemspec.
+    *Yoong Kang Lim*, *Sunny Juneja*
 
-    Fixes #9589.
+*   `config.static_index` configures directory `index.html` filename
 
-    *Arun Agrawal*, *Abd ar-Rahman Hamidi*, *Roman Shmatov*
+    Set `config.static_index` to serve a static directory index file not named
+    `index`. E.g. to serve `main.html` instead of `index.html` for directory
+    requests, set `config.static_index` to `"main"`.
 
-*   Fix `console` and `generators` blocks defined at different environments.
+    *Eliot Sykes*
 
-    Fixes #14748.
+*   `bin/setup` uses built-in rake tasks (`log:clear`, `tmp:clear`).
+
+    *Mohnish Thallavajhula*
+
+*   Fix mailer previews with attachments by using the mail gem's own API to
+    locate the first part of the correct mime type.
+
+    Fixes #14435.
+
+    *Andrew White*
+
+*   Remove sqlite support from `rails dbconsole`.
+
+    *Andrew White*
+
+*   Rename `railties/bin` to `railties/exe` to match the new Bundler executables
+    convention.
+
+    *Islam Wazery*
+
+*   Print `bundle install` output in `rails new` as soon as it's available.
+
+    Running `rails new` will now print the output of `bundle install` as
+    it is available, instead of waiting until all gems finish installing.
+
+    *Max Holder*
+
+*   Respect `pluralize_table_names` when generating fixture file.
+
+    Fixes #19519.
+
+    *Yuji Yaginuma*
+
+*   Add a new-line to the end of route method generated code.
+
+    We need to add a `\n`, because we cannot have two routes
+    in the same line.
+
+    *arthurnn*
+
+*   Add `rake initializers`.
+
+    This task prints out all defined initializers in the order they are invoked
+    by Rails. This is helpful for debugging issues related to the initialization
+    process.
+
+    *Naoto Kaneko*
+
+*   Created rake restart task. Restarts your Rails app by touching the
+    `tmp/restart.txt`.
+
+    Fixes #18876.
+
+    *Hyonjee Joo*
+
+*   Add `config/initializers/active_record_belongs_to_required_by_default.rb`.
+
+    Newly generated Rails apps have a new initializer called
+    `active_record_belongs_to_required_by_default.rb` which sets the value of
+    the configuration option `config.active_record.belongs_to_required_by_default`
+    to `true` when ActiveRecord is not skipped.
+
+    As a result, new Rails apps require `belongs_to` association on model
+    to be valid.
+
+    This initializer is *not* added when running `rake rails:update`, so
+    old apps ported to Rails 5 will work without any change.
+
+    *Josef Šimánek*
+
+*   `delete` operations in configurations are run last in order to eliminate
+    'No such middleware' errors when `insert_before` or `insert_after` are added
+    after the `delete` operation for the middleware being deleted.
+
+    Fixes #16433.
+
+    *Guo Xiang Tan*
+
+*   Newly generated applications get a `README.md` in Markdown.
+
+    *Xavier Noria*
+
+*   Remove the documentation tasks `doc:app`, `doc:rails`, and `doc:guides`.
+
+    *Xavier Noria*
+
+*   Force generated routes to be inserted into `config/routes.rb`.
+
+    *Andrew White*
+
+*   Don't remove all line endings from `config/routes.rb` when revoking scaffold.
+
+    Fixes #15913.
+
+    *Andrew White*
+
+*   Rename `--skip-test-unit` option to `--skip-test` in app generator
+
+    *Melanie Gilman*
+
+*   Add the `method_source` gem to the default Gemfile for apps.
+
+    *Sean Griffin*
+
+*   Drop old test locations from `rake stats`:
+
+    - test/functional
+    - test/unit
+
+    *Ravil Bayramgalin*
+
+*   Update `rake stats` to  correctly count declarative tests
+    as methods in `_test.rb` files.
+
+    *Ravil Bayramgalin*
+
+*   Remove deprecated `test:all` and `test:all:db` tasks.
 
     *Rafael Mendonça França*
 
-*   Move configuration of asset precompile list and version to an initializer.
+*   Remove deprecated `Rails::Rack::LogTailer`.
 
-    *Matthew Draper*
+    *Rafael Mendonça França*
 
-*   Remove sqlite3 lines from `.gitignore` if the application is not using sqlite3.
+*   Remove deprecated `RAILS_CACHE` constant.
 
-    *Dmitrii Golub*
+    *Rafael Mendonça França*
 
-*   Add public API to register new extensions for `rake notes`.
+*   Remove deprecated `serve_static_assets` configuration.
 
-    Example:
+    *Rafael Mendonça França*
 
-        config.annotations.register_extensions("scss", "sass") { |tag| /\/\/\s*(#{tag}):?\s*(.*)$/ }
+*   Use local variables in `_form.html.erb` partial generated by scaffold.
 
-    *Roberto Miranda*
+    *Andrew Kozlov*
 
-*   Removed unnecessary `rails application` command.
+*   Add `config/initializers/callback_terminator.rb`.
 
-    *Arun Agrawal*
+    Newly generated Rails apps have a new initializer called
+    `callback_terminator.rb` which sets the value of the configuration option
+    `config.active_support.halt_callback_chains_on_return_false` to `false`.
 
-*   Make the `rails:template` rake task load the application's initializers.
+    As a result, new Rails apps do not halt callback chains when a callback
+    returns `false`; only when they are explicitly halted with `throw(:abort)`.
 
-    Fixes #12133.
+    The terminator is *not* added when running `rake rails:update`, so returning
+    `false` will still work on old apps ported to Rails 5, displaying a
+    deprecation warning to prompt users to update their code to the new syntax.
 
-    *Robin Dupret*
+    *claudiob*
 
-*   Introduce `Rails.gem_version` as a convenience method to return
-    `Gem::Version.new(Rails.version)`, suggesting a more reliable way to perform
-    version comparison.
+*   Generated fixtures won't use the id when generated with references attributes.
 
-    Example:
+    *Pablo Olmos de Aguilera Corradini*
 
-        Rails.version #=> "4.1.2"
-        Rails.gem_version #=> #<Gem::Version "4.1.2">
+*   Add `--skip-action-mailer` option to the app generator.
 
-        Rails.version > "4.1.10" #=> false
-        Rails.gem_version > Gem::Version.new("4.1.10") #=> true
-        Gem::Requirement.new("~> 4.1.2") =~ Rails.gem_version #=> true
+    *claudiob*
 
-    *Prem Sichanugrist*
+*   Autoload any second level directories called `app/*/concerns`.
 
-*   Avoid namespacing routes inside engines.
+    *Alex Robbin*
 
-    Mountable engines are namespaced by default so the generated routes
-    were too while they should not.
-
-    Fixes #14079.
-
-    *Yves Senn*, *Carlos Antonio da Silva*, *Robin Dupret*
-
-Please check [4-1-stable](https://github.com/rails/rails/blob/4-1-stable/railties/CHANGELOG.md) for previous changes.
+Please check [4-2-stable](https://github.com/rails/rails/blob/4-2-stable/railties/CHANGELOG.md) for previous changes.

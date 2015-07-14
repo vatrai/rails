@@ -23,6 +23,7 @@ require 'models/chef'
 require 'models/department'
 require 'models/cake_designer'
 require 'models/drink_designer'
+require 'models/recipe'
 
 class ReflectionTest < ActiveRecord::TestCase
   include ActiveRecord::Reflection
@@ -50,13 +51,13 @@ class ReflectionTest < ActiveRecord::TestCase
   end
 
   def test_columns_are_returned_in_the_order_they_were_declared
-    column_names = Topic.columns.map { |column| column.name }
+    column_names = Topic.columns.map(&:name)
     assert_equal %w(id title author_name author_email_address written_on bonus_time last_read content important approved replies_count unique_replies_count parent_id parent_title type group created_at updated_at), column_names
   end
 
   def test_content_columns
     content_columns        = Topic.content_columns
-    content_column_names   = content_columns.map {|column| column.name}
+    content_column_names   = content_columns.map(&:name)
     assert_equal 13, content_columns.length
     assert_equal %w(title author_name author_email_address written_on bonus_time last_read content important group approved parent_title created_at updated_at).sort, content_column_names.sort
   end
@@ -80,10 +81,21 @@ class ReflectionTest < ActiveRecord::TestCase
     assert_equal :integer, @first.column_for_attribute("id").type
   end
 
-  def test_non_existent_columns_return_nil
-    assert_deprecated do
-      assert_nil @first.column_for_attribute("attribute_that_doesnt_exist")
-    end
+  def test_non_existent_columns_return_null_object
+    column = @first.column_for_attribute("attribute_that_doesnt_exist")
+    assert_instance_of ActiveRecord::ConnectionAdapters::NullColumn, column
+    assert_equal "attribute_that_doesnt_exist", column.name
+    assert_equal nil, column.sql_type
+    assert_equal nil, column.type
+  end
+
+  def test_non_existent_types_are_identity_types
+    type = @first.type_for_attribute("attribute_that_doesnt_exist")
+    object = Object.new
+
+    assert_equal object, type.deserialize(object)
+    assert_equal object, type.cast(object)
+    assert_equal object, type.serialize(object)
   end
 
   def test_reflection_klass_for_nested_class_name
@@ -209,6 +221,10 @@ class ReflectionTest < ActiveRecord::TestCase
     assert_not_equal Object.new, Firm._reflections['clients']
   end
 
+  def test_reflections_should_return_keys_as_strings
+    assert Category.reflections.keys.all? { |key| key.is_a? String }, "Model.reflections is expected to return string for keys"
+  end
+
   def test_has_and_belongs_to_many_reflection
     assert_equal :has_and_belongs_to_many, Category.reflections['posts'].macro
     assert_equal :posts, Category.reflect_on_all_associations(:has_and_belongs_to_many).first.name
@@ -260,6 +276,22 @@ class ReflectionTest < ActiveRecord::TestCase
     assert_equal 1, @hotel.cake_designers.size
     assert_equal 1, @hotel.drink_designers.size
     assert_equal 2, @hotel.chefs.size
+  end
+
+  def test_scope_chain_of_polymorphic_association_does_not_leak_into_other_hmt_associations
+    hotel = Hotel.create!
+    department = hotel.departments.create!
+    drink = department.chefs.create!(employable: DrinkDesigner.create!)
+    Recipe.create!(chef_id: drink.id, hotel_id: hotel.id)
+
+    expected_sql = capture_sql { hotel.recipes.to_a }
+
+    Hotel.reflect_on_association(:recipes).clear_association_scope_cache
+    hotel.reload
+    hotel.drink_designers.to_a
+    loaded_sql = capture_sql { hotel.recipes.to_a }
+
+    assert_equal expected_sql, loaded_sql
   end
 
   def test_nested?

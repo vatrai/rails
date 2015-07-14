@@ -1,172 +1,160 @@
-*   Provide a `builder` object when using the `label` form helper in block form.
+*   Allow defining explicit collection caching using a `# Template Collection: ...`
+    directive inside templates.
 
-    The new `builder` object responds to `translation`, allowing I18n fallback support
-    when you want to customize how a particular label is presented.
+    *Dov Murik*
 
-    *Alex Robbin*
+*   Asset helpers raise `ArgumentError` when `nil` is passed as a source.
 
-*   Add I18n support for input/textarea placeholder text.
+    *Anton Kolomiychuk*
 
-    Placeholder I18n follows the same convention as `label` I18n.
+*   Always attach the template digest to the cache key for collection caching
+    even when `virtual_path` is not available from the view context.
+    Which could happen if the rendering was done directly in the controller
+    and not in a template.
 
-    *Alex Robbin*
+    Fixes #20535
 
-*   Fix that render layout: 'messages/layout' should also be added to the dependency tracker tree.
+    *Roque Pinel*
 
-    *DHH*
+*   Improve detection of partial templates eligible for collection caching,
+    now allowing multi-line comments at the beginning of the template file.
 
-*   Add `PartialIteration` object used when rendering collections.
+    *Dov Murik*
 
-    The iteration object is available as the local variable
-    `#{template_name}_iteration` when rendering partials with collections.
+*   Raise an ArgumentError when a false value for `include_blank` is passed to a
+    required select field (to comply with the HTML5 spec).
 
-    It gives access to the `size` of the collection being iterated over,
-    the current `index` and two convenience methods `first?` and `last?`.
+    *Grey Baker*
 
-    *Joel Junström*, *Lucas Uyezu*
+*   Do not put partial name to `local_assigns` when rendering without
+    an object or a collection.
 
-*   Return an absolute instead of relative path from an asset url in the case
-    of the `asset_host` proc returning nil
+    *Henrik Nygren*
 
-    *Jolyon Pawlyn*
+*   Remove `:rescue_format` option for `translate` helper since it's no longer
+    supported by I18n.
 
-*   Fix `html_escape_once` to properly handle hex escape sequences (e.g. &#x1a2b;)
+    *Bernard Potocki*
 
-    *John F. Douthat*
+*   `translate` should handle `raise` flag correctly in case of both main and default
+    translation is missing.
 
-*   Added String support for min and max properties for date field helpers.
+    Fixes #19967
 
-    *Todd Bealmear*
+    *Bernard Potocki*
 
-*   The `highlight` helper now accepts a block to be used instead of the `highlighter`
-    option.
+*   Load the `default_form_builder` from the controller on initialization, which overrides
+    the global config if it is present.
 
-    *Lucas Mazza*
+    *Kevin McPhillips*
 
-*   The `except` and `highlight` helpers now accept regular expressions.
+*   Accept lambda as `child_index` option in `fields_for` method.
 
-    *Jan Szumiec*
+    *Karol Galanciak*
 
-*   Flatten the array parameter in `safe_join`, so it behaves consistently with
-    `Array#join`.
+*   `translate` allows `default: [[]]` again for a default value of `[]`.
 
-    *Paul Grayson*
+    Fixes #19640.
 
-*   Honor `html_safe` on array elements in tag values, as we do for plain string
-    values.
+    *Adam Prescott*
 
-    *Paul Grayson*
+*   `translate` should accept nils as members of the `:default`
+    parameter without raising a translation missing error.
 
-*   Add `ActionView::Template::Handler.unregister_template_handler`.
+    Fixes #19419
 
-    It performs the opposite of `ActionView::Template::Handler.register_template_handler`.
-
-    *Zuhao Wan*
-
-*   Bring `cache_digest` rake tasks up-to-date with the latest API changes
-
-    *Jiri Pospisil*
-
-*   Allow custom `:host` option to be passed to `asset_url` helper that
-    overwrites `config.action_controller.asset_host` for particular asset.
-
-    *Hubert Łępicki*
-
-*   Deprecate `AbstractController::Base.parent_prefixes`.
-    Override `AbstractController::Base.local_prefixes` when you want to change
-    where to find views.
-
-    *Nick Sutterer*
-
-*   Take label values into account when doing I18n lookups for model attributes.
-
-    The following:
-
-        # form.html.erb
-        <%= form_for @post do |f| %>
-          <%= f.label :type, value: "long" %>
-        <% end %>
-
-        # en.yml
-        en:
-          activerecord:
-            attributes:
-              post/long: "Long-form Post"
-
-    Used to simply return "long", but now it will return "Long-form
-    Post".
-
-    *Joshua Cody*
-
-*   Change `asset_path` to use File.join to create proper paths:
-
-    Before:
-
-        https://some.host.com//assets/some.js
-
-    After:
-
-        https://some.host.com/assets/some.js
-
-    *Peter Schröder*
-
-*   Change `favicon_link_tag` default mimetype from `image/vnd.microsoft.icon` to
-    `image/x-icon`.
-
-    Before:
-
-        #=> favicon_link_tag 'myicon.ico'
-        <link href="/assets/myicon.ico" rel="shortcut icon" type="image/vnd.microsoft.icon" />
-
-    After:
-
-        #=> favicon_link_tag 'myicon.ico'
-        <link href="/assets/myicon.ico" rel="shortcut icon" type="image/x-icon" />
-
-    *Geoffroy Lorieux*
-
-*   Remove wrapping div with inline styles for hidden form fields.
-
-    We are dropping HTML 4.01 and XHTML strict compliance since input tags directly
-    inside a form are valid HTML5, and the absence of inline styles help in validating
-    for Content Security Policy.
-
-    *Joost Baaij*
-
-*   `collection_check_boxes` respects `:index` option for the hidden filed name.
-
-    Fixes #14147.
-
-    *Vasiliy Ermolovich*
-
-*   `date_select` helper with option `with_css_classes: true` does not overwrite other classes.
-
-    *Izumi Wong-Horiuchi*
+    *Justin Coyne*
 
 *   `number_to_percentage` does not crash with `Float::NAN` or `Float::INFINITY`
-    as input.
+    as input when `precision: 0` is used.
 
-    Fixes #14405.
+    Fixes #19227.
 
     *Yves Senn*
 
-*   Add `include_hidden` option to `collection_check_boxes` helper.
+*   Fixed the translation helper method to accept different default values types
+    besides String.
 
-    *Vasiliy Ermolovich*
+    *Ulisses Almeida*
 
-*   Fixed a problem where the default options for the `button_tag` helper is not
-    applied correctly.
+*   Collection rendering automatically caches and fetches multiple partials.
 
-    Fixes #14254.
+    Collections rendered as:
 
-    *Sergey Prikhodko*
+    ```ruby
+    <%= render @notifications %>
+    <%= render partial: 'notifications/notification', collection: @notifications, as: :notification %>
+    ```
 
-*   Take variants into account when calculating template digests in ActionView::Digestor.
+    will now read several partials from cache at once, if the template starts with a cache call:
 
-    The arguments to ActionView::Digestor#digest are now being passed as a hash
-    to support variants and allow more flexibility in the future. The support for
-    regular (required) arguments is deprecated and will be removed in Rails 5.0 or later.
+    ```ruby
+    # notifications/_notification.html.erb
+    <% cache notification do %>
+      <%# ... %>
+    <% end %>
+    ```
 
-    *Piotr Chmolowski, Łukasz Strzałkowski*
+    *Kasper Timm Hansen*
 
-Please check [4-1-stable](https://github.com/rails/rails/blob/4-1-stable/actionview/CHANGELOG.md) for previous changes.
+*   Fixed a dependency tracker bug that caused template dependencies not
+    count layouts as dependencies for partials.
+
+    *Juho Leinonen*
+
+*   Extracted `ActionView::Helpers::RecordTagHelper` to external gem
+    (`record_tag_helper`) and added removal notices.
+
+    *Todd Bealmear*
+
+*   Allow to pass a string value to `size` option in `image_tag` and `video_tag`.
+
+    This makes the behavior more consistent with `width` or `height` options.
+
+    *Mehdi Lahmam*
+
+*   Partial template name does no more have to be a valid Ruby identifier.
+
+    There used to be a naming rule that the partial name should start with
+    underscore, and should be followed by any combination of letters, numbers
+    and underscores.
+    But now we can give our partials any name starting with underscore, such as
+    _🍔.html.erb.
+
+    *Akira Matsuda*
+
+*   Change the default template handler from `ERB` to `Raw`.
+
+    Files without a template handler in their extension will be rendered using the raw
+    handler instead of ERB.
+
+    *Rafael Mendonça França*
+
+*   Remove deprecated `AbstractController::Base::parent_prefixes`.
+
+    *Rafael Mendonça França*
+
+*   Default translations that have a lower precedence than a html safe default,
+    but are not themselves safe, should not be marked as html_safe.
+
+    *Justin Coyne*
+
+*   Make possible to use blocks with short version of `render "partial"` helper.
+
+    *Nikolay Shebanov*
+
+*   Add a `hidden_field` on the `file_field` to avoid raise a error when the only
+    input on the form is the `file_field`.
+
+    *Mauro George*
+
+*   Add an explicit error message, in `ActionView::PartialRenderer` for partial
+    `rendering`, when the value of option `as` has invalid characters.
+
+    *Angelo Capilleri*
+
+*   Allow entries without a link tag in `AtomFeedHelper`.
+
+    *Daniel Gomez de Souza*
+
+Please check [4-2-stable](https://github.com/rails/rails/blob/4-2-stable/actionview/CHANGELOG.md) for previous changes.

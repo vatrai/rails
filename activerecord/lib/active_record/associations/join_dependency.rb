@@ -20,7 +20,7 @@ module ActiveRecord
         end
 
         def columns
-          @tables.flat_map { |t| t.column_aliases }
+          @tables.flat_map(&:column_aliases)
         end
 
         # An array of [column_name, alias] pairs for the table
@@ -93,8 +93,7 @@ module ActiveRecord
       #    joins # =>  []
       #
       def initialize(base, associations, joins)
-        @alias_tracker = AliasTracker.create(base.connection, joins)
-        @alias_tracker.aliased_name_for(base.table_name, base.table_name) # Updates the count for base.table_name to 1
+        @alias_tracker = AliasTracker.create_with_joins(base.connection, base.table_name, joins, base.type_caster)
         tree = self.class.make_tree associations
         @join_root = JoinBase.new base, build(tree, base)
         @join_root.children.each { |child| construct_tables! @join_root, child }
@@ -142,10 +141,19 @@ module ActiveRecord
         parents = model_cache[join_root]
         column_aliases = aliases.column_aliases join_root
 
-        result_set.each { |row_hash|
-          parent = parents[row_hash[primary_key]] ||= join_root.instantiate(row_hash, column_aliases)
-          construct(parent, join_root, row_hash, result_set, seen, model_cache, aliases)
+        message_bus = ActiveSupport::Notifications.instrumenter
+
+        payload = {
+          record_count: result_set.length,
+          class_name: join_root.base_klass.name
         }
+
+        message_bus.instrument('instantiation.active_record', payload) do
+          result_set.each { |row_hash|
+            parent = parents[row_hash[primary_key]] ||= join_root.instantiate(row_hash, column_aliases)
+            construct(parent, join_root, row_hash, result_set, seen, model_cache, aliases)
+          }
+        end
 
         parents.values
       end
@@ -224,23 +232,26 @@ module ActiveRecord
       end
 
       def construct(ar_parent, parent, row, rs, seen, model_cache, aliases)
+        return if ar_parent.nil?
         primary_id  = ar_parent.id
 
         parent.children.each do |node|
           if node.reflection.collection?
             other = ar_parent.association(node.reflection.name)
             other.loaded!
-          else
-            if ar_parent.association_cache.key?(node.reflection.name)
-              model = ar_parent.association(node.reflection.name).target
-              construct(model, node, row, rs, seen, model_cache, aliases)
-              next
-            end
+          elsif ar_parent.association_cached?(node.reflection.name)
+            model = ar_parent.association(node.reflection.name).target
+            construct(model, node, row, rs, seen, model_cache, aliases)
+            next
           end
 
           key = aliases.column_alias(node, node.primary_key)
           id = row[key]
-          next if id.nil?
+          if id.nil?
+            nil_association = ar_parent.association(node.reflection.name)
+            nil_association.loaded!
+            next
+          end
 
           model = seen[parent.base_klass][primary_id][node.base_klass][id]
 
@@ -248,6 +259,7 @@ module ActiveRecord
             construct(model, node, row, rs, seen, model_cache, aliases)
           else
             model = construct_model(ar_parent, node, row, model_cache, id, aliases)
+            model.readonly!
             seen[parent.base_klass][primary_id][node.base_klass][id] = model
             construct(model, node, row, rs, seen, model_cache, aliases)
           end

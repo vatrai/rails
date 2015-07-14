@@ -3,35 +3,47 @@ require 'active_support/core_ext/uri'
 
 module ActionDispatch
   # This middleware returns a file's contents from disk in the body response.
-  # When initialized it can accept an optional 'Cache-Control' header which
+  # When initialized, it can accept an optional 'Cache-Control' header, which
   # will be set when a response containing a file's contents is delivered.
   #
   # This middleware will render the file specified in `env["PATH_INFO"]`
-  # where the base path is in the +root+ directory. For example if the +root+
-  # is set to `public/` then a request with `env["PATH_INFO"]` of
-  # `assets/application.js` will return a response with contents of a file
+  # where the base path is in the +root+ directory. For example, if the +root+
+  # is set to `public/`, then a request with `env["PATH_INFO"]` of
+  # `assets/application.js` will return a response with the contents of a file
   # located at `public/assets/application.js` if the file exists. If the file
-  # does not exist a 404 "File not Found" response will be returned.
+  # does not exist, a 404 "File not Found" response will be returned.
   class FileHandler
-    def initialize(root, cache_control)
+    def initialize(root, cache_control, index: 'index')
       @root          = root.chomp('/')
       @compiled_root = /^#{Regexp.escape(root)}/
       headers        = cache_control && { 'Cache-Control' => cache_control }
       @file_server = ::Rack::File.new(@root, headers)
+      @index = index
     end
 
+    # Takes a path to a file. If the file is found, has valid encoding, and has
+    # correct read permissions, the return value is a URI-escaped string
+    # representing the filename. Otherwise, false is returned.
+    #
+    # Used by the `Static` class to check the existence of a valid file
+    # in the server's `public/` directory (see Static#call).
     def match?(path)
-      path = unescape_path(path)
+      path = URI.parser.unescape(path)
       return false unless path.valid_encoding?
+      path = Rack::Utils.clean_path_info path
 
-      full_path = path.empty? ? @root : File.join(@root, escape_glob_chars(path))
-      paths = "#{full_path}#{ext}"
+      paths = [path, "#{path}#{ext}", "#{path}/#{@index}#{ext}"]
 
-      matches = Dir[paths]
-      match = matches.detect { |m| File.file?(m) }
-      if match
-        match.sub!(@compiled_root, '')
-        ::Rack::Utils.escape(match)
+      if match = paths.detect { |p|
+        path = File.join(@root, p.force_encoding('UTF-8'))
+        begin
+          File.file?(path) && File.readable?(path)
+        rescue SystemCallError
+          false
+        end
+
+      }
+        return ::Rack::Utils.escape(match)
       end
     end
 
@@ -42,6 +54,9 @@ module ActionDispatch
       if gzip_path && gzip_encoding_accepted?(env)
         env['PATH_INFO']            = gzip_path
         status, headers, body       = @file_server.call(env)
+        if status == 304
+          return [status, headers, body]
+        end
         headers['Content-Encoding'] = 'gzip'
         headers['Content-Type']     = content_type(path)
       else
@@ -57,18 +72,7 @@ module ActionDispatch
 
     private
       def ext
-        @ext ||= begin
-          ext = ::ActionController::Base.default_static_extension
-          "{,#{ext},/index#{ext}}"
-        end
-      end
-
-      def unescape_path(path)
-        URI.parser.unescape(path)
-      end
-
-      def escape_glob_chars(path)
-        path.gsub(/[*?{}\[\]]/, "\\\\\\&")
+        ::ActionController::Base.default_static_extension
       end
 
       def content_type(path)
@@ -91,7 +95,7 @@ module ActionDispatch
   end
 
   # This middleware will attempt to return the contents of a file's body from
-  # disk in the response.  If a file is not found on disk, the request will be
+  # disk in the response. If a file is not found on disk, the request will be
   # delegated to the application stack. This middleware is commonly initialized
   # to serve assets from a server's `public/` directory.
   #
@@ -100,9 +104,9 @@ module ActionDispatch
   # produce a directory traversal using this middleware. Only 'GET' and 'HEAD'
   # requests will result in a file being returned.
   class Static
-    def initialize(app, path, cache_control=nil)
+    def initialize(app, path, cache_control = nil, index: 'index')
       @app = app
-      @file_handler = FileHandler.new(path, cache_control)
+      @file_handler = FileHandler.new(path, cache_control, index: index)
     end
 
     def call(env)
@@ -110,7 +114,7 @@ module ActionDispatch
       when 'GET', 'HEAD'
         path = env['PATH_INFO'].chomp('/')
         if match = @file_handler.match?(path)
-          env["PATH_INFO"] = match
+          env['PATH_INFO'] = match
           return @file_handler.call(env)
         end
       end

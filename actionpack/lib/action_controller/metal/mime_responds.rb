@@ -1,28 +1,7 @@
-require 'active_support/core_ext/array/extract_options'
 require 'abstract_controller/collector'
 
 module ActionController #:nodoc:
   module MimeResponds
-    extend ActiveSupport::Concern
-
-    module ClassMethods
-      def respond_to(*)
-        raise NoMethodError, "The controller-level `respond_to' feature has " \
-          "been extracted to the `responders` gem. Add it to your Gemfile to " \
-          "continue using this feature:\n" \
-          "  gem 'responders', '~> 2.0'\n" \
-          "Consult the Rails upgrade guide for details."
-      end
-    end
-
-    def respond_with(*)
-      raise NoMethodError, "The `respond_with' feature has been extracted " \
-        "to the `responders` gem. Add it to your Gemfile to continue using " \
-        "this feature:\n" \
-        "  gem 'responders', '~> 2.0'\n" \
-        "Consult the Rails upgrade guide for details."
-    end
-
     # Without web-service support, an action which collects the data for displaying a list of people
     # might look something like this:
     #
@@ -135,18 +114,6 @@ module ActionController #:nodoc:
     #
     #   render json: @people
     #
-    # Since this is a common pattern, you can use the class method respond_to
-    # with the respond_with method to have the same results:
-    #
-    #   class PeopleController < ApplicationController
-    #     respond_to :html, :xml, :json
-    #
-    #     def index
-    #       @people = Person.all
-    #       respond_with(@people)
-    #     end
-    #   end
-    #
     # Formats can have different variants.
     #
     # The request variant is a specialization of the request format, like <tt>:tablet</tt>,
@@ -214,13 +181,13 @@ module ActionController #:nodoc:
     #     format.html.phone # this gets rendered
     #   end
     #
-    # Be sure to check the documentation of +respond_with+ and
-    # <tt>ActionController::MimeResponds.respond_to</tt> for more examples.
-    def respond_to(*mimes, &block)
+    # Be sure to check the documentation of <tt>ActionController::MimeResponds.respond_to</tt>
+    # for more examples.
+    def respond_to(*mimes)
       raise ArgumentError, "respond_to takes either types or a block, never both" if mimes.any? && block_given?
 
       collector = Collector.new(mimes, request.variant)
-      block.call(collector) if block_given?
+      yield collector if block_given?
 
       if format = collector.negotiate_format(request)
         _process_format(format)
@@ -234,8 +201,8 @@ module ActionController #:nodoc:
     # A container for responses available from the current controller for
     # requests for different mime-types sent to a particular action.
     #
-    # The public controller methods +respond_with+ and +respond_to+ may be called
-    # with a block that is used to define responses to different mime-types, e.g.
+    # The public controller methods +respond_to+ may be called with a block
+    # that is used to define responses to different mime-types, e.g.
     # for +respond_to+ :
     #
     #   respond_to do |format|
@@ -321,16 +288,17 @@ module ActionController #:nodoc:
         end
 
         def variant
-          if @variant.nil?
+          if @variant.empty?
             @variants[:none] || @variants[:any]
-          elsif (@variants.keys & @variant).any?
-            @variant.each do |v|
-              return @variants[v] if @variants.key?(v)
-            end
           else
-            @variants[:any]
+            @variants[variant_key]
           end
         end
+
+        private
+          def variant_key
+            @variant.find { |variant| @variants.key?(variant) } || :any
+          end
       end
     end
   end

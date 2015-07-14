@@ -48,7 +48,11 @@ class Time
     alias_method :at, :at_with_coercion
   end
 
-  # Seconds since midnight: Time.now.seconds_since_midnight
+  # Returns the number of seconds since 00:00:00.
+  #
+  #   Time.new(2012, 8, 29,  0,  0,  0).seconds_since_midnight # => 0
+  #   Time.new(2012, 8, 29, 12, 34, 56).seconds_since_midnight # => 45296
+  #   Time.new(2012, 8, 29, 23, 59, 59).seconds_since_midnight # => 86399
   def seconds_since_midnight
     to_i - change(:hour => 0).to_i + (usec / 1.0e+6)
   end
@@ -64,11 +68,12 @@ class Time
 
   # Returns a new Time where one or more of the elements have been changed according
   # to the +options+ parameter. The time options (<tt>:hour</tt>, <tt>:min</tt>,
-  # <tt>:sec</tt>, <tt>:usec</tt>) reset cascadingly, so if only the hour is passed,
-  # then minute, sec, and usec is set to 0. If the hour and minute is passed, then
-  # sec and usec is set to 0.  The +options+ parameter takes a hash with any of these
-  # keys: <tt>:year</tt>, <tt>:month</tt>, <tt>:day</tt>, <tt>:hour</tt>, <tt>:min</tt>,
-  # <tt>:sec</tt>, <tt>:usec</tt>.
+  # <tt>:sec</tt>, <tt>:usec</tt>, <tt>:nsec</tt>) reset cascadingly, so if only
+  # the hour is passed, then minute, sec, usec and nsec is set to 0. If the hour
+  # and minute is passed, then sec, usec and nsec is set to 0. The +options+
+  # parameter takes a hash with any of these keys: <tt>:year</tt>, <tt>:month</tt>,
+  # <tt>:day</tt>, <tt>:hour</tt>, <tt>:min</tt>, <tt>:sec</tt>, <tt>:usec</tt>
+  # <tt>:nsec</tt>. Pass either <tt>:usec</tt> or <tt>:nsec</tt>, not both.
   #
   #   Time.new(2012, 8, 29, 22, 35, 0).change(day: 1)              # => Time.new(2012, 8, 1, 22, 35, 0)
   #   Time.new(2012, 8, 29, 22, 35, 0).change(year: 1981, day: 1)  # => Time.new(1981, 8, 1, 22, 35, 0)
@@ -80,13 +85,20 @@ class Time
     new_hour  = options.fetch(:hour, hour)
     new_min   = options.fetch(:min, options[:hour] ? 0 : min)
     new_sec   = options.fetch(:sec, (options[:hour] || options[:min]) ? 0 : sec)
-    new_usec  = options.fetch(:usec, (options[:hour] || options[:min] || options[:sec]) ? 0 : Rational(nsec, 1000))
+
+    if new_nsec = options[:nsec]
+      raise ArgumentError, "Can't change both :nsec and :usec at the same time: #{options.inspect}" if options[:usec]
+      new_usec = Rational(new_nsec, 1000)
+    else
+      new_usec  = options.fetch(:usec, (options[:hour] || options[:min] || options[:sec]) ? 0 : Rational(nsec, 1000))
+    end
 
     if utc?
       ::Time.utc(new_year, new_month, new_day, new_hour, new_min, new_sec, new_usec)
     elsif zone
       ::Time.local(new_year, new_month, new_day, new_hour, new_min, new_sec, new_usec)
     else
+      raise ArgumentError, 'argument out of range' if new_usec >= 1000000
       ::Time.new(new_year, new_month, new_day, new_hour, new_min, new_sec + (new_usec.to_r / 1000000), utc_offset)
     end
   end
@@ -154,7 +166,7 @@ class Time
   alias :at_noon :middle_of_day
   alias :at_middle_of_day :middle_of_day
 
-  # Returns a new Time representing the end of the day, 23:59:59.999999 (.999999999 in ruby1.9)
+  # Returns a new Time representing the end of the day, 23:59:59.999999
   def end_of_day
     change(
       :hour => 23,
@@ -171,7 +183,7 @@ class Time
   end
   alias :at_beginning_of_hour :beginning_of_hour
 
-  # Returns a new Time representing the end of the hour, x:59:59.999999 (.999999999 in ruby1.9)
+  # Returns a new Time representing the end of the hour, x:59:59.999999
   def end_of_hour
     change(
       :min => 59,
@@ -187,7 +199,7 @@ class Time
   end
   alias :at_beginning_of_minute :beginning_of_minute
 
-  # Returns a new Time representing the end of the minute, x:xx:59.999999 (.999999999 in ruby1.9)
+  # Returns a new Time representing the end of the minute, x:xx:59.999999
   def end_of_minute
     change(
       :sec => 59,
@@ -234,8 +246,10 @@ class Time
   # Layers additional behavior on Time#<=> so that DateTime and ActiveSupport::TimeWithZone instances
   # can be chronologically compared with a Time
   def compare_with_coercion(other)
-    # we're avoiding Time#to_datetime cause it's expensive
-    if other.is_a?(Time)
+    # we're avoiding Time#to_datetime and Time#to_time because they're expensive
+    if other.class == Time
+      compare_without_coercion(other)
+    elsif other.is_a?(Time)
       compare_without_coercion(other.to_time)
     else
       to_datetime <=> other

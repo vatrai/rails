@@ -1,5 +1,5 @@
 #--
-# Copyright (c) 2014 David Heinemeier Hansson
+# Copyright (c) 2014-2015 David Heinemeier Hansson
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -30,4 +30,8 @@ module ActiveJob
   extend ActiveSupport::Autoload
 
   autoload :Base
+  autoload :QueueAdapters
+  autoload :ConfiguredJob
+  autoload :TestCase
+  autoload :TestHelper
 end

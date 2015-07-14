@@ -1,4 +1,7 @@
 #!/usr/bin/env ruby
+# Profile require calls giving information about the time and the files that are called
+# when loading the provided file.
+#
 # Example:
 #   tools/profile activesupport/lib/active_support.rb [ruby-prof mode] [ruby-prof printer]
 ENV['NO_RELOAD'] ||= '1'
@@ -65,7 +68,7 @@ module CodeTools
     private
 
     def assert_ruby_file_exists(path)
-      fail Error.new("No such file") unless File.exists?(path)
+      fail Error.new("No such file") unless File.exist?(path)
       fail Error.new("#{path} is a directory") if File.directory?(path)
       ruby_extension = File.extname(path) == '.rb'
       ruby_executable = File.open(path, 'rb') {|f| f.readline } =~ [/\A#!.*ruby/]
@@ -114,9 +117,9 @@ rescue LoadError
     def camelize(uppercase_first_letter = true)
       string = self
       if uppercase_first_letter
-        string = string.sub(/^[a-z\d]*/) { $&.capitalize }
+        string = string.sub(/^[a-z\d]*/) { |match| match.capitalize }
       else
-        string = string.sub(/^(?:(?=\b|[A-Z_])|\w)/) { $&.downcase }
+        string = string.sub(/^(?:(?=\b|[A-Z_])|\w)/) { |match| match.downcase }
       end
       string.gsub(/(?:_|(\/))([a-z\d]*)/) { "#{$1}#{$2.capitalize}" }.gsub('/', '::')
     end

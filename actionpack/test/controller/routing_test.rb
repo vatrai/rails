@@ -1,4 +1,3 @@
-# encoding: utf-8
 require 'abstract_unit'
 require 'controller/fake_controllers'
 require 'active_support/core_ext/object/with_options'
@@ -8,8 +7,6 @@ class MilestonesController < ActionController::Base
   def index() head :ok end
   alias_method :show, :index
 end
-
-ROUTING = ActionDispatch::Routing
 
 # See RFC 3986, section 3.3 for allowed path characters.
 class UriReservedCharactersRoutingTest < ActiveSupport::TestCase
@@ -872,7 +869,7 @@ class RouteSetTest < ActiveSupport::TestCase
 
   def default_route_set
     @default_route_set ||= begin
-      set = ROUTING::RouteSet.new
+      set = ActionDispatch::Routing::RouteSet.new
       set.draw do
         get '/:controller(/:action(/:id))'
       end
@@ -884,13 +881,13 @@ class RouteSetTest < ActiveSupport::TestCase
     set.draw { get ':controller/(:action(/:id))' }
     path, extras = set.generate_extras(:controller => "foo", :action => "bar", :id => 15, :this => "hello", :that => "world")
     assert_equal "/foo/bar/15", path
-    assert_equal %w(that this), extras.map { |e| e.to_s }.sort
+    assert_equal %w(that this), extras.map(&:to_s).sort
   end
 
   def test_extra_keys
     set.draw { get ':controller/:action/:id' }
     extras = set.extra_keys(:controller => "foo", :action => "bar", :id => 15, :this => "hello", :that => "world")
-    assert_equal %w(that this), extras.map { |e| e.to_s }.sort
+    assert_equal %w(that this), extras.map(&:to_s).sort
   end
 
   def test_generate_extras_not_first
@@ -900,7 +897,7 @@ class RouteSetTest < ActiveSupport::TestCase
     end
     path, extras = set.generate_extras(:controller => "foo", :action => "bar", :id => 15, :this => "hello", :that => "world")
     assert_equal "/foo/bar/15", path
-    assert_equal %w(that this), extras.map { |e| e.to_s }.sort
+    assert_equal %w(that this), extras.map(&:to_s).sort
   end
 
   def test_generate_not_first
@@ -918,7 +915,7 @@ class RouteSetTest < ActiveSupport::TestCase
       get ':controller/:action/:id'
     end
     extras = set.extra_keys(:controller => "foo", :action => "bar", :id => 15, :this => "hello", :that => "world")
-    assert_equal %w(that this), extras.map { |e| e.to_s }.sort
+    assert_equal %w(that this), extras.map(&:to_s).sort
   end
 
   def test_draw
@@ -1001,6 +998,9 @@ class RouteSetTest < ActiveSupport::TestCase
 
     assert_equal "http://test.host/people?baz=bar#location",
       controller.send(:index_url, :baz => "bar", :anchor => 'location')
+
+    assert_equal "http://test.host/people", controller.send(:index_url, anchor: nil)
+    assert_equal "http://test.host/people", controller.send(:index_url, anchor: false)
   end
 
   def test_named_route_url_method_with_port
@@ -1383,7 +1383,7 @@ class RouteSetTest < ActiveSupport::TestCase
     url = controller.url_for({ :controller => "connection", :only_path => true })
     assert_equal "/connection/connection", url
 
-    url = controller.url_for({ :use_route => :family_connection,
+    url = controller.url_for({ :use_route => "family_connection",
                                :controller => "connection", :only_path => true })
     assert_equal "/connection", url
   end
@@ -1746,13 +1746,13 @@ class RouteSetTest < ActiveSupport::TestCase
 
   include ActionDispatch::RoutingVerbs
 
-  class TestSet < ROUTING::RouteSet
+  class TestSet < ActionDispatch::Routing::RouteSet
     def initialize(block)
       @block = block
       super()
     end
 
-    class Dispatcher < ROUTING::RouteSet::Dispatcher
+    class Dispatcher < ActionDispatch::Routing::RouteSet::Dispatcher
       def initialize(defaults, set, block)
         super(defaults)
         @block = block

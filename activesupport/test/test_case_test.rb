@@ -172,3 +172,37 @@ class TestCaseTaggedLoggingTest < ActiveSupport::TestCase
     assert_match "#{self.class}: #{name}\n", @out.string
   end
 end
+
+class TestOrderTest < ActiveSupport::TestCase
+  def setup
+    @original_test_order = ActiveSupport::TestCase.test_order
+  end
+
+  def teardown
+    ActiveSupport::TestCase.test_order = @original_test_order
+  end
+
+  def test_defaults_to_random
+    ActiveSupport::TestCase.test_order = nil
+
+    assert_equal :random, ActiveSupport::TestCase.test_order
+
+    assert_equal :random, ActiveSupport.test_order
+  end
+
+  def test_test_order_is_global
+    ActiveSupport::TestCase.test_order = :sorted
+
+    assert_equal :sorted, ActiveSupport.test_order
+    assert_equal :sorted, ActiveSupport::TestCase.test_order
+    assert_equal :sorted, self.class.test_order
+    assert_equal :sorted, Class.new(ActiveSupport::TestCase).test_order
+
+    ActiveSupport.test_order = :random
+
+    assert_equal :random, ActiveSupport.test_order
+    assert_equal :random, ActiveSupport::TestCase.test_order
+    assert_equal :random, self.class.test_order
+    assert_equal :random, Class.new(ActiveSupport::TestCase).test_order
+  end
+end

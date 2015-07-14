@@ -11,7 +11,7 @@ module ActionDispatch
       ##
       # +path+ is a path constraint.
       # +constraints+ is a hash of constraints to be applied to this route.
-      def initialize(name, app, path, constraints, defaults = {})
+      def initialize(name, app, path, constraints, required_defaults, defaults)
         @name        = name
         @app         = app
         @path        = path
@@ -19,6 +19,7 @@ module ActionDispatch
         @constraints = constraints
         @defaults    = defaults
         @required_defaults = nil
+        @_required_defaults = required_defaults || []
         @required_parts    = nil
         @parts             = nil
         @decorated_ast     = nil
@@ -36,7 +37,7 @@ module ActionDispatch
 
       def requirements # :nodoc:
         # needed for rails `rake routes`
-        path.requirements.merge(@defaults).delete_if { |_,v|
+        @defaults.merge(path.requirements).delete_if { |_,v|
           /.+?/ == v
         }
       end
@@ -60,7 +61,7 @@ module ActionDispatch
       end
 
       def parts
-        @parts ||= segments.map { |n| n.to_sym }
+        @parts ||= segments.map(&:to_sym)
       end
       alias :segment_keys :parts
 
@@ -68,16 +69,12 @@ module ActionDispatch
         @path_formatter.evaluate path_options
       end
 
-      def optional_parts
-        path.optional_names.map { |n| n.to_sym }
-      end
-
       def required_parts
-        @required_parts ||= path.required_names.map { |n| n.to_sym }
+        @required_parts ||= path.required_names.map(&:to_sym)
       end
 
       def required_default?(key)
-        (constraints[:required_defaults] || []).include?(key)
+        @_required_defaults.include?(key)
       end
 
       def required_defaults
@@ -96,8 +93,6 @@ module ActionDispatch
 
       def matches?(request)
         constraints.all? do |method, value|
-          next true unless request.respond_to?(method)
-
           case value
           when Regexp, String
             value === request.send(method).to_s

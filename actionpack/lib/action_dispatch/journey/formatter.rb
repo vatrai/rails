@@ -39,8 +39,8 @@ module ActionDispatch
           return [route.format(parameterized_parts), params]
         end
 
-        message = "No route matches #{Hash[constraints.sort].inspect}"
-        message << " missing required keys: #{missing_keys.sort.inspect}" if name
+        message = "No route matches #{Hash[constraints.sort_by{|k,v| k.to_s}].inspect}"
+        message << " missing required keys: #{missing_keys.sort.inspect}" unless missing_keys.empty?
 
         raise ActionController::UrlGenerationError, message
       end

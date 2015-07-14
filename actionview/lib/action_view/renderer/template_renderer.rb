@@ -18,7 +18,7 @@ module ActionView
 
     # Determine the template to be rendered using the given options.
     def determine_template(options)
-      keys = options.fetch(:locals, {}).keys
+      keys = options.has_key?(:locals) ? options[:locals].keys : []
 
       if options.key?(:body)
         Template::Text.new(options[:body])
@@ -40,7 +40,7 @@ module ActionView
           find_template(options[:template], options[:prefixes], false, keys, @details)
         end
       else
-        raise ArgumentError, "You invoked render but did not give any of :partial, :template, :inline, :file, :plain, :text or :body option."
+        raise ArgumentError, "You invoked render but did not give any of :partial, :template, :inline, :file, :plain, :html, :text or :body option."
       end
     end
 

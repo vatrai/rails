@@ -7,7 +7,7 @@ Gem::Specification.new do |s|
   s.summary     = 'Job framework with pluggable queues.'
   s.description = 'Declare job classes that can be run by a variety of queueing backends.'
 
-  s.required_ruby_version = '>= 1.9.3'
+  s.required_ruby_version = '>= 2.2.2'
 
   s.license = 'MIT'
 
@@ -19,5 +19,5 @@ Gem::Specification.new do |s|
   s.require_path = 'lib'
 
   s.add_dependency 'activesupport', version
-  s.add_dependency 'globalid', '>= 0.2.3'
+  s.add_dependency 'globalid', '>= 0.3.0'
 end

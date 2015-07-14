@@ -1,3 +1,5 @@
+**DO NOT READ THIS FILE ON GITHUB, GUIDES ARE PUBLISHED ON http://guides.rubyonrails.org.**
+
 Active Record Migrations
 ========================
 
@@ -39,7 +41,7 @@ class CreateProducts < ActiveRecord::Migration
       t.string :name
       t.text :description
 
-      t.timestamps
+      t.timestamps null: false
     end
   end
 end
@@ -239,7 +241,7 @@ generates
 ```ruby
 class AddUserRefToProducts < ActiveRecord::Migration
   def change
-    add_reference :products, :user, index: true
+    add_reference :products, :user, index: true, foreign_key: true
   end
 end
 ```
@@ -285,7 +287,7 @@ class CreateProducts < ActiveRecord::Migration
       t.string :name
       t.text :description
 
-      t.timestamps
+      t.timestamps null: false
     end
   end
 end
@@ -355,7 +357,7 @@ will append `ENGINE=BLACKHOLE` to the SQL statement used to create the table
 
 ### Creating a Join Table
 
-Migration method `create_join_table` creates a HABTM join table. A typical use
+Migration method `create_join_table` creates an HABTM join table. A typical use
 would be:
 
 ```ruby
@@ -421,21 +423,23 @@ change_column :products, :part_number, :text
 ```
 
 This changes the column `part_number` on products table to be a `:text` field.
+Note that `change_column` command is irreversible.
 
 Besides `change_column`, the `change_column_null` and `change_column_default`
-methods are used specifically to change the null and default values of a
-column.
+methods are used specifically to change a not null constraint and default
+values of a column.
 
 ```ruby
 change_column_null :products, :name, false
-change_column_default :products, :approved, false
+change_column_default :products, :approved, from: true, to: false
 ```
 
 This sets `:name` field on products to a `NOT NULL` column and the default
-value of the `:approved` field to false.
+value of the `:approved` field from true to false.
 
-TIP: Unlike `change_column` (and `change_column_default`), `change_column_null`
-is reversible.
+Note: You could also write the above `change_column_default` migration as
+`change_column_default :products, :approved, false`, but unlike the previous
+example, this would make your migration irreversible.
 
 ### Column Modifiers
 
@@ -452,6 +456,8 @@ number of digits after the decimal point.
 are using a dynamic value (such as a date), the default will only be calculated
 the first time (i.e. on the date the migration is applied).
 * `index`        Adds an index for the column.
+* `required`     Adds `required: true` for `belongs_to` associations and
+`null: false` to the column in the migration.
 
 Some adapters may support additional options; see the adapter specific API docs
 for further information.
@@ -466,16 +472,18 @@ add_foreign_key :articles, :authors
 ```
 
 This adds a new foreign key to the `author_id` column of the `articles`
-table. The key references the `id` column of the `articles` table. If the
+table. The key references the `id` column of the `authors` table. If the
 column names can not be derived from the table names, you can use the
 `:column` and `:primary_key` options.
 
 Rails will generate a name for every foreign key starting with
-`fk_rails_` followed by 10 random characters.
+`fk_rails_` followed by 10 characters which are deterministically
+generated from the `from_table` and `column`.
 There is a `:name` option to specify a different name if needed.
 
 NOTE: Active Record only supports single column foreign keys. `execute` and
-`structure.sql` are required to use composite foreign keys.
+`structure.sql` are required to use composite foreign keys. See
+[Schema Dumping and You](#schema-dumping-and-you).
 
 Removing a foreign key is easy as well:
 
@@ -496,7 +504,7 @@ If the helpers provided by Active Record aren't enough you can use the `execute`
 method to execute arbitrary SQL:
 
 ```ruby
-Product.connection.execute('UPDATE `products` SET `price`=`free` WHERE 1')
+Product.connection.execute("UPDATE products SET price = 'free' WHERE 1=1")
 ```
 
 For more details and examples of individual methods, check the API documentation.
@@ -534,6 +542,14 @@ definitions:
 `change_table` is also reversible, as long as the block does not call `change`,
 `change_default` or `remove`.
 
+`remove_column` is reversible if you supply the column type as the third
+argument. Provide the original column options too, otherwise Rails can't
+recreate the column exactly when rolling back:
+
+```ruby
+remove_column :posts, :slug, :string, null: false, default: '', index: true
+```
+
 If you're going to need to use any other methods, you should use `reversible`
 or write the `up` and `down` methods instead of using the `change` method.
 
@@ -541,7 +557,7 @@ or write the `up` and `down` methods instead of using the `change` method.
 
 Complex migrations may require processing that Active Record doesn't know how
 to reverse. You can use `reversible` to specify what to do when running a
-migration what else to do when reverting it. For example:
+migration and what else to do when reverting it. For example:
 
 ```ruby
 class ExampleMigration < ActiveRecord::Migration
@@ -593,7 +609,7 @@ schema, and the `down` method of your migration should revert the
 transformations done by the `up` method. In other words, the database schema
 should be unchanged if you do an `up` followed by a `down`. For example, if you
 create a table in the `up` method, you should drop it in the `down` method. It
-is wise to reverse the transformations in precisely the reverse order they were
+is wise to perform the transformations in precisely the reverse order they were
 made in the `up` method. The example in the `reversible` section is equivalent to:
 
 ```ruby
@@ -690,6 +706,10 @@ but this would have involved a few more steps: reversing the order
 of `create_table` and `reversible`, replacing `create_table`
 by `drop_table`, and finally replacing `up` by `down` and vice-versa.
 This is all taken care of by `revert`.
+
+NOTE: If you want to add check constraints like in the examples above,
+you will have to use `structure.sql` as dump method. See
+[Schema Dumping and You](#schema-dumping-and-you).
 
 Running Migrations
 ------------------
@@ -824,7 +844,7 @@ class CreateProducts < ActiveRecord::Migration
       create_table :products do |t|
         t.string :name
         t.text :description
-        t.timestamps
+        t.timestamps null: false
       end
     end
 
@@ -939,10 +959,10 @@ that Active Record supports. This could be very useful if you were to
 distribute an application that is able to run against multiple databases.
 
 There is however a trade-off: `db/schema.rb` cannot express database specific
-items such as triggers, or stored procedures. While in a migration you can
-execute custom SQL statements, the schema dumper cannot reconstitute those
-statements from the database. If you are using features like this, then you
-should set the schema format to `:sql`.
+items such as triggers, stored procedures or check constraints. While in a
+migration you can execute custom SQL statements, the schema dumper cannot
+reconstitute those statements from the database. If you are using features like
+this, then you should set the schema format to `:sql`.
 
 Instead of using Active Record's schema dumper, the database's structure will
 be dumped using a tool specific to the database (via the `db:structure:dump`

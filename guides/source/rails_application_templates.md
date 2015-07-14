@@ -1,3 +1,5 @@
+**DO NOT READ THIS FILE ON GITHUB, GUIDES ARE PUBLISHED ON http://guides.rubyonrails.org.**
+
 Rails Application Templates
 ===========================
 
@@ -213,7 +215,7 @@ CODE
 
 ### yes?(question) or no?(question)
 
-These methods let you ask questions from templates and decide the flow based on the user's answer. Let's say you want to freeze rails only if the user wants to:
+These methods let you ask questions from templates and decide the flow based on the user's answer. Let's say you want to Freeze Rails only if the user wants to:
 
 ```ruby
 rake("rails:freeze:gems") if yes?("Freeze rails gems?")

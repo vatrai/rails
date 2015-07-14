@@ -68,8 +68,8 @@ module ActionDispatch
 
       def visualizer
         tt     = GTG::Builder.new(ast).transition_table
-        groups = partitioned_routes.first.map(&:ast).group_by { |a| a.to_s }
-        asts   = groups.values.map { |v| v.first }
+        groups = partitioned_routes.first.map(&:ast).group_by(&:to_s)
+        asts   = groups.values.map(&:first)
         tt.visualizer(asts)
       end
 
@@ -88,7 +88,7 @@ module ActionDispatch
         end
 
         def custom_routes
-          partitioned_routes.last
+          routes.custom_routes
         end
 
         def filter_routes(path)
@@ -121,7 +121,8 @@ module ActionDispatch
         end
 
         def match_head_routes(routes, req)
-          head_routes = match_routes(routes, req)
+          verb_specific_routes = routes.reject { |route| route.verb == // }
+          head_routes = match_routes(verb_specific_routes, req)
 
           if head_routes.empty?
             begin

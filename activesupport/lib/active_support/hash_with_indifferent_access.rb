@@ -1,4 +1,5 @@
 require 'active_support/core_ext/hash/keys'
+require 'active_support/core_ext/hash/reverse_merge'
 
 module ActiveSupport
   # Implements a hash where keys <tt>:foo</tt> and <tt>"foo"</tt> are considered
@@ -187,7 +188,7 @@ module ActiveSupport
     #   dup[:a][:c]  # => "c"
     def dup
       self.class.new(self).tap do |new_hash|
-        new_hash.default = default
+        set_defaults(new_hash)
       end
     end
 
@@ -246,7 +247,9 @@ module ActiveSupport
 
     # Convert to a regular hash with string keys.
     def to_hash
-      _new_hash = Hash.new(default)
+      _new_hash = Hash.new
+      set_defaults(_new_hash)
+
       each do |key, value|
         _new_hash[key] = convert_value(value, for: :to_hash)
       end
@@ -266,12 +269,20 @@ module ActiveSupport
             value.nested_under_indifferent_access
           end
         elsif value.is_a?(Array)
-          unless options[:for] == :assignment
+          if options[:for] != :assignment || value.frozen?
             value = value.dup
           end
           value.map! { |e| convert_value(e, options) }
         else
           value
+        end
+      end
+
+      def set_defaults(target)
+        if default_proc
+          target.default_proc = default_proc.dup
+        else
+          target.default = default
         end
       end
   end

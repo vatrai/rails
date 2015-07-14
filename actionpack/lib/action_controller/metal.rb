@@ -165,7 +165,7 @@ module ActionController
       headers["Location"] = url
     end
 
-    # basic url_for that can be overridden for more robust functionality
+    # Basic url_for that can be overridden for more robust functionality
     def url_for(string)
       string
     end
@@ -173,6 +173,7 @@ module ActionController
     def status
       @_status
     end
+    alias :response_code :status # :nodoc:
 
     def status=(status)
       @_status = Rack::Utils.status_code(status)
@@ -182,18 +183,22 @@ module ActionController
       body = [body] unless body.nil? || body.respond_to?(:each)
       super
     end
-    
+
     # Tests if render or redirect has already happened.
     def performed?
       response_body || (response && response.committed?)
     end
 
     def dispatch(name, request) #:nodoc:
+      set_request!(request)
+      process(name)
+      to_a
+    end
+
+    def set_request!(request) #:nodoc:
       @_request = request
       @_env = request.env
       @_env['action_controller.instance'] = self
-      process(name)
-      to_a
     end
 
     def to_a #:nodoc:
@@ -235,10 +240,6 @@ module ActionController
       else
         lambda { |env| new.dispatch(name, klass.new(env)) }
       end
-    end
-
-    def _status_code
-      @_status
     end
   end
 end

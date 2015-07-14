@@ -39,7 +39,7 @@ module ActiveRecord
 
   class PendingMigrationError < MigrationError#:nodoc:
     def initialize
-      if defined?(Rails)
+      if defined?(Rails.env)
         super("Migrations are pending. To resolve this issue, run:\n\n\tbin/rake db:migrate RAILS_ENV=#{::Rails.env}")
       else
         super("Migrations are pending. To resolve this issue, run:\n\n\tbin/rake db:migrate")
@@ -138,10 +138,13 @@ module ActiveRecord
   #   <tt>:name</tt>, <tt>:unique</tt> (e.g.
   #   <tt>{ name: 'users_name_index', unique: true }</tt>) and <tt>:order</tt>
   #   (e.g. <tt>{ order: { name: :desc } }</tt>).
-  # * <tt>remove_index(table_name, column: column_name)</tt>: Removes the index
-  #   specified by +column_name+.
+  # * <tt>remove_index(table_name, column: column_names)</tt>: Removes the index
+  #   specified by +column_names+.
   # * <tt>remove_index(table_name, name: index_name)</tt>: Removes the index
   #   specified by +index_name+.
+  # * <tt>add_reference(:table_name, :reference_name)</tt>: Adds a new column
+  #   +reference_name_id+ by default a integer. See
+  #   ActiveRecord::ConnectionAdapters::SchemaStatements#add_reference for details.
   #
   # == Irreversible transformations
   #
@@ -168,7 +171,7 @@ module ActiveRecord
   # This will generate the file <tt>timestamp_add_fieldname_to_tablename</tt>, which will look like this:
   #   class AddFieldnameToTablename < ActiveRecord::Migration
   #     def change
-  #       add_column :tablenames, :field, :string
+  #       add_column :tablenames, :fieldname, :string
   #     end
   #   end
   #
@@ -184,8 +187,8 @@ module ActiveRecord
   # you wish to downgrade. Alternatively, you can also use the STEP option if you
   # wish to rollback last few migrations. <tt>rake db:migrate STEP=2</tt> will rollback
   # the latest two migrations.
-  # 
-  # If any of the migrations throw an <tt>ActiveRecord::IrreversibleMigration</tt> exception, 
+  #
+  # If any of the migrations throw an <tt>ActiveRecord::IrreversibleMigration</tt> exception,
   # that step will fail and you'll have some manual work to do.
   #
   # == Database support
@@ -275,21 +278,6 @@ module ActiveRecord
   # The phrase "Updating salaries..." would then be printed, along with the
   # benchmark for the block when the block completes.
   #
-  # == About the schema_migrations table
-  #
-  # Rails versions 2.0 and prior used to create a table called
-  # <tt>schema_info</tt> when using migrations. This table contained the
-  # version of the schema as of the last applied migration.
-  #
-  # Starting with Rails 2.1, the <tt>schema_info</tt> table is
-  # (automatically) replaced by the <tt>schema_migrations</tt> table, which
-  # contains the version numbers of all the migrations applied.
-  #
-  # As a result, it is now possible to add migration files that are numbered
-  # lower than the current schema version: when migrating up, those
-  # never-applied "interleaved" migrations will be automatically applied, and
-  # when migrating down, never-applied "interleaved" migrations will be skipped.
-  #
   # == Timestamped Migrations
   #
   # By default, Rails generates migrations that look like:
@@ -307,9 +295,8 @@ module ActiveRecord
   #
   # == Reversible Migrations
   #
-  # Starting with Rails 3.1, you will be able to define reversible migrations.
   # Reversible migrations are migrations that know how to go +down+ for you.
-  # You simply supply the +up+ logic, and the Migration system will figure out
+  # You simply supply the +up+ logic, and the Migration system figures out
   # how to execute the down commands for you.
   #
   # To define a reversible migration, define the +change+ method in your
@@ -394,8 +381,15 @@ module ActiveRecord
       end
 
       def load_schema_if_pending!
-        if ActiveRecord::Migrator.needs_migration?
-          ActiveRecord::Tasks::DatabaseTasks.load_schema_current
+        if ActiveRecord::Migrator.needs_migration? || !ActiveRecord::Migrator.any_migrations?
+          # Roundtrip to Rake to allow plugins to hook into database initialization.
+          FileUtils.cd Rails.root do
+            current_config = Base.connection_config
+            Base.clear_all_connections!
+            system("bin/rake db:test:prepare")
+            # Establish a new connection, the old database may be gone (db:test:prepare uses purge)
+            Base.establish_connection(current_config)
+          end
           check_pending!
         end
       end
@@ -640,13 +634,14 @@ module ActiveRecord
     end
 
     def method_missing(method, *arguments, &block)
-      arg_list = arguments.map{ |a| a.inspect } * ', '
+      arg_list = arguments.map(&:inspect) * ', '
 
       say_with_time "#{method}(#{arg_list})" do
         unless @connection.respond_to? :revert
           unless arguments.empty? || [:execute, :enable_extension, :disable_extension].include?(method)
             arguments[0] = proper_table_name(arguments.first, table_name_options)
-            if [:rename_table, :add_foreign_key].include?(method)
+            if [:rename_table, :add_foreign_key].include?(method) ||
+              (method == :remove_foreign_key && !arguments.second.is_a?(Hash))
               arguments[1] = proper_table_name(arguments.second, table_name_options)
             end
           end
@@ -846,6 +841,10 @@ module ActiveRecord
 
       def needs_migration?(connection = Base.connection)
         (migrations(migrations_paths).collect(&:version) - get_all_versions(connection)).size > 0
+      end
+
+      def any_migrations?
+        migrations(migrations_paths).any?
       end
 
       def last_version

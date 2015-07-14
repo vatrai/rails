@@ -1,12 +1,5 @@
 require 'abstract_unit'
-
-begin
-  require 'openssl'
-  OpenSSL::PKCS5
-rescue LoadError, NameError
-  $stderr.puts "Skipping KeyGenerator test: broken OpenSSL install"
-else
-
+require 'openssl'
 require 'active_support/key_generator'
 require 'active_support/message_verifier'
 
@@ -152,8 +145,18 @@ class CookiesTest < ActionController::TestCase
       head :ok
     end
 
+    def set_cookie_with_domain_all_as_string
+      cookies[:user_name] = {:value => "rizwanreza", :domain => 'all'}
+      head :ok
+    end
+
     def delete_cookie_with_domain
       cookies.delete(:user_name, :domain => :all)
+      head :ok
+    end
+
+    def delete_cookie_with_domain_all_as_string
+      cookies.delete(:user_name, :domain => 'all')
       head :ok
     end
 
@@ -206,7 +209,7 @@ class CookiesTest < ActionController::TestCase
 
   def setup
     super
-    @request.env["action_dispatch.key_generator"] = ActiveSupport::KeyGenerator.new("b3c631c314c0bbca50c1b2843150fe33")
+    @request.env["action_dispatch.key_generator"] = ActiveSupport::KeyGenerator.new("b3c631c314c0bbca50c1b2843150fe33", iterations: 2)
     @request.env["action_dispatch.signed_cookie_salt"] = "b3c631c314c0bbca50c1b2843150fe33"
     @request.env["action_dispatch.encrypted_cookie_salt"] = "b3c631c314c0bbca50c1b2843150fe33"
     @request.env["action_dispatch.encrypted_signed_cookie_salt"] = "b3c631c314c0bbca50c1b2843150fe33"
@@ -277,7 +280,7 @@ class CookiesTest < ActionController::TestCase
   def test_setting_the_same_value_to_cookie
     request.cookies[:user_name] = 'david'
     get :authenticate
-    assert response.cookies.empty?
+    assert_predicate response.cookies, :empty?
   end
 
   def test_setting_the_same_value_to_permanent_cookie
@@ -357,7 +360,7 @@ class CookiesTest < ActionController::TestCase
   def test_delete_unexisting_cookie
     request.cookies.clear
     get :delete_cookie
-    assert @response.cookies.empty?
+    assert_predicate @response.cookies, :empty?
   end
 
   def test_deleted_cookie_predicate
@@ -375,7 +378,7 @@ class CookiesTest < ActionController::TestCase
 
   def test_cookies_persist_throughout_request
     response = get :authenticate
-    assert response.headers["Set-Cookie"] =~ /user_name=david/
+    assert_match(/user_name=david/, response.headers["Set-Cookie"])
   end
 
   def test_set_permanent_cookie
@@ -494,7 +497,7 @@ class CookiesTest < ActionController::TestCase
     assert_nil @response.cookies["user_id"]
   end
 
-  def test_accessing_nonexistant_signed_cookie_should_not_raise_an_invalid_signature
+  def test_accessing_nonexistent_signed_cookie_should_not_raise_an_invalid_signature
     get :set_signed_cookie
     assert_nil @controller.send(:cookies).signed[:non_existant_attribute]
   end
@@ -612,7 +615,7 @@ class CookiesTest < ActionController::TestCase
     assert_nil @response.cookies["foo"]
   end
 
-  def test_accessing_nonexistant_encrypted_cookie_should_not_raise_invalid_message
+  def test_accessing_nonexistent_encrypted_cookie_should_not_raise_invalid_message
     get :set_encrypted_cookie
     assert_nil @controller.send(:cookies).encrypted[:non_existant_attribute]
   end
@@ -984,6 +987,13 @@ class CookiesTest < ActionController::TestCase
     assert_cookie_header "user_name=rizwanreza; domain=.nextangle.local; path=/"
   end
 
+  def test_cookie_with_all_domain_option_using_a_non_standard_2_letter_tld
+    @request.host = "admin.lvh.me"
+    get :set_cookie_with_domain_and_tld
+    assert_response :success
+    assert_cookie_header "user_name=rizwanreza; domain=.lvh.me; path=/"
+  end
+
   def test_cookie_with_all_domain_option_using_host_with_port_and_tld_length
     @request.host = "nextangle.local:3000"
     get :set_cookie_with_domain_and_tld
@@ -1154,6 +1164,4 @@ class CookiesTest < ActionController::TestCase
         assert_not_equal expected.split("\n"), header
       end
     end
-end
-
 end

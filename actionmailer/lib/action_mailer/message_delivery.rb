@@ -38,14 +38,15 @@ module ActionMailer
     # that the message will be sent bypassing checking +perform_deliveries+
     # and +raise_delivery_errors+, so use with caution.
     #
-    #   Notifier.welcome(User.first).deliver_later
-    #   Notifier.welcome(User.first).deliver_later(in: 1.hour)
-    #   Notifier.welcome(User.first).deliver_later(at: 10.hours.from_now)
+    #   Notifier.welcome(User.first).deliver_later!
+    #   Notifier.welcome(User.first).deliver_later!(wait: 1.hour)
+    #   Notifier.welcome(User.first).deliver_later!(wait_until: 10.hours.from_now)
     #
     # Options:
     #
-    # * <tt>:in</tt> - Enqueue the email to be delivered with a delay
-    # * <tt>:at</tt> - Enqueue the email to be delivered at (after) a specific date / time
+    # * <tt>:wait</tt> - Enqueue the email to be delivered with a delay
+    # * <tt>:wait_until</tt> - Enqueue the email to be delivered at (after) a specific date / time
+    # * <tt>:queue</tt> - Enqueue the email on the specified queue
     def deliver_later!(options={})
       enqueue_delivery :deliver_now!, options
     end
@@ -54,13 +55,14 @@ module ActionMailer
     # job runs it will send the email using +deliver_now+.
     #
     #   Notifier.welcome(User.first).deliver_later
-    #   Notifier.welcome(User.first).deliver_later(in: 1.hour)
-    #   Notifier.welcome(User.first).deliver_later(at: 10.hours.from_now)
+    #   Notifier.welcome(User.first).deliver_later(wait: 1.hour)
+    #   Notifier.welcome(User.first).deliver_later(wait_until: 10.hours.from_now)
     #
     # Options:
     #
-    # * <tt>:in</tt> - Enqueue the email to be delivered with a delay
-    # * <tt>:at</tt> - Enqueue the email to be delivered at (after) a specific date / time
+    # * <tt>:wait</tt> - Enqueue the email to be delivered with a delay
+    # * <tt>:wait_until</tt> - Enqueue the email to be delivered at (after) a specific date / time
+    # * <tt>:queue</tt> - Enqueue the email on the specified queue
     def deliver_later(options={})
       enqueue_delivery :deliver_now, options
     end
@@ -82,31 +84,11 @@ module ActionMailer
       message.deliver
     end
 
-    def deliver! #:nodoc:
-      ActiveSupport::Deprecation.warn "#deliver! is deprecated and will be removed in Rails 5. " \
-        "Use #deliver_now! to deliver immediately or #deliver_later! to deliver through Active Job."
-      deliver_now!
-    end
-
-    def deliver #:nodoc:
-      ActiveSupport::Deprecation.warn "#deliver is deprecated and will be removed in Rails 5. " \
-        "Use #deliver_now to deliver immediately or #deliver_later to deliver through Active Job."
-      deliver_now
-    end
-
     private
 
       def enqueue_delivery(delivery_method, options={})
         args = @mailer.name, @mail_method.to_s, delivery_method.to_s, *@args
-        enqueue_method = :enqueue
-        if options[:at]
-          enqueue_method = :enqueue_at
-          args.unshift options[:at]
-        elsif options[:in]
-          enqueue_method = :enqueue_in
-          args.unshift options[:in]
-        end
-        ActionMailer::DeliveryJob.send enqueue_method, *args
+        ActionMailer::DeliveryJob.set(options).perform_later(*args)
       end
   end
 end

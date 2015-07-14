@@ -1,5 +1,3 @@
-require 'action_controller/model_naming'
-
 module ActionDispatch
   module Routing
     # Polymorphic URL helpers are methods for smart resolution to a named route call when
@@ -55,8 +53,6 @@ module ActionDispatch
     #   form_for([blog, @post])         # => "/blog/posts/1"
     #
     module PolymorphicRoutes
-      include ActionController::ModelNaming
-
       # Constructs a call to a named RESTful route for the given record and returns the
       # resulting URL string. For example:
       #
@@ -116,7 +112,6 @@ module ActionDispatch
                                                action,
                                                type,
                                                opts
-
       end
 
       # Returns the path component of a URL for the given record. It uses
@@ -159,8 +154,7 @@ module ActionDispatch
       end
 
       def polymorphic_path_for_action(action, record_or_hash, options)
-        options = options.merge(:action => action, :routing_type => :path)
-        polymorphic_path(record_or_hash, options)
+        polymorphic_path(record_or_hash, options.merge(:action => action))
       end
 
       class HelperMethodBuilder # :nodoc:
@@ -197,7 +191,8 @@ module ActionDispatch
 
           case record_or_hash_or_array
           when Array
-            if record_or_hash_or_array.empty? || record_or_hash_or_array.include?(nil)
+            record_or_hash_or_array = record_or_hash_or_array.compact
+            if record_or_hash_or_array.empty?
               raise ArgumentError, "Nil location provided. Can't build URI."
             end
             if record_or_hash_or_array.first.is_a?(ActionDispatch::Routing::RoutesProxy)
@@ -252,14 +247,12 @@ module ActionDispatch
           args  = []
 
           model = record.to_model
-          name = if record.persisted?
-                   args << model
-                   model.model_name.singular_route_key
-                 else
-                   @key_strategy.call model.model_name
-                 end
-
-          named_route = prefix + "#{name}_#{suffix}"
+          named_route = if model.persisted?
+                          args << model
+                          get_method_for_string model.model_name.singular_route_key
+                        else
+                          get_method_for_class model
+                        end
 
           [named_route, args]
         end
@@ -295,11 +288,12 @@ module ActionDispatch
           when Class
             @key_strategy.call record.model_name
           else
-            if record.persisted?
-              args << record.to_model
-              record.to_model.model_name.singular_route_key
+            model = record.to_model
+            if model.persisted?
+              args << model
+              model.model_name.singular_route_key
             else
-              @key_strategy.call record.to_model.model_name
+              @key_strategy.call model.model_name
             end
           end
 
@@ -313,11 +307,11 @@ module ActionDispatch
 
         def get_method_for_class(klass)
           name   = @key_strategy.call klass.model_name
-          prefix + "#{name}_#{suffix}"
+          get_method_for_string name
         end
 
         def get_method_for_string(str)
-          prefix + "#{str}_#{suffix}"
+          "#{prefix}#{str}_#{suffix}"
         end
 
         [nil, 'new', 'edit'].each do |action|

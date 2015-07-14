@@ -11,7 +11,7 @@ module ActiveSupport
       NORMALIZATION_FORMS = [:c, :kc, :d, :kd]
 
       # The Unicode version that is supported by the implementation
-      UNICODE_VERSION = '6.3.0'
+      UNICODE_VERSION = '7.0.0'
 
       # The default normalization used for operations that require
       # normalization. It can be set to any of the normalizations
@@ -42,7 +42,6 @@ module ActiveSupport
         0x0085,                # White_Space # Cc       <control-0085>
         0x00A0,                # White_Space # Zs       NO-BREAK SPACE
         0x1680,                # White_Space # Zs       OGHAM SPACE MARK
-        0x180E,                # White_Space # Zs       MONGOLIAN VOWEL SEPARATOR
         (0x2000..0x200A).to_a, # White_Space # Zs  [11] EN QUAD..HAIR SPACE
         0x2028,                # White_Space # Zl       LINE SEPARATOR
         0x2029,                # White_Space # Zp       PARAGRAPH SEPARATOR
@@ -212,9 +211,8 @@ module ActiveSupport
         codepoints
       end
 
-      # Ruby >= 2.1 has String#scrub, which is faster than the workaround used for < 2.1.
       # Rubinius' String#scrub, however, doesn't support ASCII-incompatible chars.
-      if '<3'.respond_to?(:scrub) && !defined?(Rubinius)
+      if !defined?(Rubinius)
         # Replaces all ISO-8859-1 or CP1252 characters by their UTF-8 equivalent
         # resulting in a valid UTF-8 string.
         #

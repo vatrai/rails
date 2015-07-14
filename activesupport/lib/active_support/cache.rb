@@ -8,7 +8,6 @@ require 'active_support/core_ext/numeric/bytes'
 require 'active_support/core_ext/numeric/time'
 require 'active_support/core_ext/object/to_param'
 require 'active_support/core_ext/string/inflections'
-require 'active_support/deprecation'
 
 module ActiveSupport
   # See ActiveSupport::Cache::Store for documentation.
@@ -179,18 +178,6 @@ module ActiveSupport
         @silence = previous_silence
       end
 
-      # :deprecated:
-      def self.instrument=(boolean)
-        ActiveSupport::Deprecation.warn "ActiveSupport::Cache.instrument= is deprecated and will be removed in Rails 5. Instrumentation is now always on so you can safely stop using it."
-        true
-      end
-
-      # :deprecated:
-      def self.instrument
-        ActiveSupport::Deprecation.warn "ActiveSupport::Cache.instrument is deprecated and will be removed in Rails 5. Instrumentation is now always on so you can safely stop using it."
-        true
-      end
-
       # Fetches data from the cache, using the given key. If there is data in
       # the cache with the given key, then that data is returned.
       #
@@ -338,19 +325,22 @@ module ActiveSupport
       def read_multi(*names)
         options = names.extract_options!
         options = merged_options(options)
-        results = {}
-        names.each do |name|
-          key = namespaced_key(name, options)
-          entry = read_entry(key, options)
-          if entry
-            if entry.expired?
-              delete_entry(key, options)
-            else
-              results[name] = entry.value
+
+        instrument_multi(:read, names, options) do |payload|
+          results = {}
+          names.each do |name|
+            key = namespaced_key(name, options)
+            entry = read_entry(key, options)
+            if entry
+              if entry.expired?
+                delete_entry(key, options)
+              else
+                results[name] = entry.value
+              end
             end
           end
+          results
         end
-        results
       end
 
       # Fetches data from the cache, using the given keys. If there is data in
@@ -363,8 +353,11 @@ module ActiveSupport
       # Returns a hash with the data for each of the names. For example:
       #
       #   cache.write("bim", "bam")
-      #   cache.fetch_multi("bim", "boom") { |key| key * 2 }
-      #   # => { "bam" => "bam", "boom" => "boomboom" }
+      #   cache.fetch_multi("bim", "unknown_key") do |key|
+      #     "Fallback value for key: #{key}"
+      #   end
+      #   # => { "bim" => "bam",
+      #   #      "unknown_key" => "Fallback value for key: unknown_key" }
       #
       def fetch_multi(*names)
         options = names.extract_options!
@@ -540,16 +533,27 @@ module ActiveSupport
         end
 
         def instrument(operation, key, options = nil)
-          log(operation, key, options)
+          log { "Cache #{operation}: #{key}#{options.blank? ? "" : " (#{options.inspect})"}" }
 
           payload = { :key => key }
           payload.merge!(options) if options.is_a?(Hash)
           ActiveSupport::Notifications.instrument("cache_#{operation}.active_support", payload){ yield(payload) }
         end
 
-        def log(operation, key, options = nil)
+        def instrument_multi(operation, keys, options = nil)
+          log do
+            formatted_keys = keys.map { |k| "- #{k}" }.join("\n")
+            "Caches multi #{operation}:\n#{formatted_keys}#{options.blank? ? "" : " (#{options.inspect})"}"
+          end
+
+          payload = { key: keys }
+          payload.merge!(options) if options.is_a?(Hash)
+          ActiveSupport::Notifications.instrument("cache_#{operation}_multi.active_support", payload) { yield(payload) }
+        end
+
+        def log
           return unless logger && logger.debug? && !silence?
-          logger.debug("Cache #{operation}: #{key}#{options.blank? ? "" : " (#{options.inspect})"}")
+          logger.debug(yield)
         end
 
         def find_cached_entry(key, name, options)
@@ -562,9 +566,9 @@ module ActiveSupport
         def handle_expired_entry(entry, key, options)
           if entry && entry.expired?
             race_ttl = options[:race_condition_ttl].to_i
-            if race_ttl && (Time.now.to_f - entry.expires_at <= race_ttl)
-              # When an entry has :race_condition_ttl defined, put the stale entry back into the cache
-              # for a brief period while the entry is begin recalculated.
+            if (race_ttl > 0) && (Time.now.to_f - entry.expires_at <= race_ttl)
+              # When an entry has a positive :race_condition_ttl defined, put the stale entry back into the cache
+              # for a brief period while the entry is being recalculated.
               entry.expires_at = Time.now + race_ttl
               write_entry(key, entry, :expires_in => race_ttl * 2)
             else
@@ -615,14 +619,12 @@ module ActiveSupport
       end
 
       def value
-        convert_version_4beta1_entry! if defined?(@v)
         compressed? ? uncompress(@value) : @value
       end
 
       # Check if the entry is expired. The +expires_in+ parameter can override
       # the value set when the entry was created.
       def expired?
-        convert_version_4beta1_entry! if defined?(@value)
         @expires_in && @created_at + @expires_in <= Time.now.to_f
       end
 
@@ -658,8 +660,6 @@ module ActiveSupport
       # Duplicate the value in a class. This is used by cache implementations that don't natively
       # serialize entries to protect against accidental cache modifications.
       def dup_value!
-        convert_version_4beta1_entry! if defined?(@v)
-
         if @value && !compressed? && !(@value.is_a?(Numeric) || @value == true || @value == false)
           if @value.is_a?(String)
             @value = @value.dup
@@ -691,26 +691,6 @@ module ActiveSupport
 
         def uncompress(value)
           Marshal.load(Zlib::Inflate.inflate(value))
-        end
-
-        # The internals of this method changed between Rails 3.x and 4.0. This method provides the glue
-        # to ensure that cache entries created under the old version still work with the new class definition.
-        def convert_version_4beta1_entry!
-          if defined?(@v)
-            @value = @v
-            remove_instance_variable(:@v)
-          end
-
-          if defined?(@c)
-            @compressed = @c
-            remove_instance_variable(:@c)
-          end
-
-          if defined?(@x) && @x
-            @created_at ||= Time.now.to_f
-            @expires_in = @x - @created_at
-            remove_instance_variable(:@x)
-          end
         end
     end
   end

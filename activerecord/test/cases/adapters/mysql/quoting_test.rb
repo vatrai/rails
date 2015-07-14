@@ -1,25 +1,15 @@
 require "cases/helper"
 
-module ActiveRecord
-  module ConnectionAdapters
-    class MysqlAdapter
-      class QuotingTest < ActiveRecord::TestCase
-        def setup
-          @conn = ActiveRecord::Base.connection
-        end
+class MysqlQuotingTest < ActiveRecord::MysqlTestCase
+  def setup
+    @conn = ActiveRecord::Base.connection
+  end
 
-        def test_type_cast_true
-          c = Column.new(nil, 1, Type::Boolean.new)
-          assert_equal 1, @conn.type_cast(true, nil)
-          assert_equal 1, @conn.type_cast(true, c)
-        end
+  def test_type_cast_true
+    assert_equal 1, @conn.type_cast(true)
+  end
 
-        def test_type_cast_false
-          c = Column.new(nil, 1, Type::Boolean.new)
-          assert_equal 0, @conn.type_cast(false, nil)
-          assert_equal 0, @conn.type_cast(false, c)
-        end
-      end
-    end
+  def test_type_cast_false
+    assert_equal 0, @conn.type_cast(false)
   end
 end

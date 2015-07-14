@@ -1,3 +1,5 @@
+**DO NOT READ THIS FILE ON GITHUB, GUIDES ARE PUBLISHED ON http://guides.rubyonrails.org.**
+
 Active Record Callbacks
 =======================
 
@@ -66,7 +68,7 @@ class User < ActiveRecord::Base
 
   protected
     def normalize_name
-      self.name = self.name.downcase.titleize
+      self.name = name.downcase.titleize
     end
 
     def set_location

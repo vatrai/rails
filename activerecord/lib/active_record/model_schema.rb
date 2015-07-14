@@ -63,7 +63,7 @@ module ActiveRecord
     #   records, artists => artists_records
     #   music_artists, music_records => music_artists_records
     def self.derive_join_table_name(first_table, second_table) # :nodoc:
-      [first_table.to_s, second_table.to_s].sort.join("\0").gsub(/^(.*_)(.+)\0\1(.+)/, '\1\2_\3').gsub("\0", "_")
+      [first_table.to_s, second_table.to_s].sort.join("\0").gsub(/^(.*_)(.+)\0\1(.+)/, '\1\2_\3').tr("\0", "_")
     end
 
     module ClassMethods
@@ -111,17 +111,6 @@ module ActiveRecord
       #   class Mouse < ActiveRecord::Base
       #     self.table_name = "mice"
       #   end
-      #
-      # Alternatively, you can override the table_name method to define your
-      # own computation. (Possibly using <tt>super</tt> to manipulate the default
-      # table name.) Example:
-      #
-      #   class Post < ActiveRecord::Base
-      #     def self.table_name
-      #       "special_" + super
-      #     end
-      #   end
-      #   Post.table_name # => "special_posts"
       def table_name
         reset_table_name unless defined?(@table_name)
         @table_name
@@ -132,9 +121,6 @@ module ActiveRecord
       #   class Project < ActiveRecord::Base
       #     self.table_name = "project"
       #   end
-      #
-      # You can also just define your own <tt>self.table_name</tt> method; see
-      # the documentation for ActiveRecord::Base#table_name.
       def table_name=(value)
         value = value && value.to_s
 
@@ -147,7 +133,7 @@ module ActiveRecord
         @quoted_table_name = nil
         @arel_table        = nil
         @sequence_name     = nil unless defined?(@explicit_sequence_name) && @explicit_sequence_name
-        @relation          = Relation.create(self, arel_table)
+        @predicate_builder = nil
       end
 
       # Returns a quoted version of the table name, used to construct SQL statements.
@@ -231,33 +217,42 @@ module ActiveRecord
       end
 
       def attributes_builder # :nodoc:
-        @attributes_builder ||= AttributeSet::Builder.new(column_types)
+        @attributes_builder ||= AttributeSet::Builder.new(attribute_types, primary_key)
       end
 
-      def column_types # :nodoc:
-        @column_types ||= columns_hash.transform_values(&:cast_type).tap do |h|
-          h.default = Type::Value.new
-        end
+      def columns_hash # :nodoc:
+        load_schema
+        @columns_hash
+      end
+
+      def columns
+        load_schema
+        @columns ||= columns_hash.values
+      end
+
+      def attribute_types # :nodoc:
+        load_schema
+        @attribute_types ||= Hash.new(Type::Value.new)
       end
 
       def type_for_attribute(attr_name) # :nodoc:
-        column_types[attr_name]
+        attribute_types[attr_name]
       end
 
       # Returns a hash where the keys are column names and the values are
       # default values when instantiating the AR object for this table.
       def column_defaults
-        default_attributes.to_hash
+        load_schema
+        _default_attributes.to_hash
       end
 
-      def default_attributes # :nodoc:
-        @default_attributes ||= attributes_builder.build_from_database(
-          columns_hash.transform_values(&:default))
+      def _default_attributes # :nodoc:
+        @default_attributes ||= AttributeSet.new({})
       end
 
       # Returns an array of column names as strings.
       def column_names
-        @column_names ||= columns.map { |column| column.name }
+        @column_names ||= columns.map(&:name)
       end
 
       # Returns an array of column objects where the primary id, all columns ending in "_id" or "_count",
@@ -295,21 +290,49 @@ module ActiveRecord
       def reset_column_information
         connection.clear_cache!
         undefine_attribute_methods
-        connection.schema_cache.clear_table_cache!(table_name) if table_exists?
+        connection.schema_cache.clear_table_cache!(table_name)
 
-        @arel_engine             = nil
-        @column_names            = nil
-        @column_types            = nil
-        @content_columns         = nil
-        @default_attributes      = nil
-        @dynamic_methods_hash    = nil
-        @inheritance_column      = nil unless defined?(@explicit_inheritance_column) && @explicit_inheritance_column
-        @relation                = nil
-        @time_zone_column_names  = nil
-        @cached_time_zone        = nil
+        reload_schema_from_cache
       end
 
       private
+
+      def schema_loaded?
+        defined?(@columns_hash) && @columns_hash
+      end
+
+      def load_schema
+        unless schema_loaded?
+          load_schema!
+        end
+      end
+
+      def load_schema!
+        @columns_hash = connection.schema_cache.columns_hash(table_name)
+        @columns_hash.each do |name, column|
+          warn_if_deprecated_type(column)
+          define_attribute(
+            name,
+            connection.lookup_cast_type_from_column(column),
+            default: column.default,
+            user_provided_default: false
+          )
+        end
+      end
+
+      def reload_schema_from_cache
+        @arel_engine = nil
+        @arel_table = nil
+        @column_names = nil
+        @attribute_types = nil
+        @content_columns = nil
+        @default_attributes = nil
+        @inheritance_column = nil unless defined?(@explicit_inheritance_column) && @explicit_inheritance_column
+        @attributes_builder = nil
+        @columns = nil
+        @columns_hash = nil
+        @attribute_names = nil
+      end
 
       # Guesses the table name, but does not decorate it with prefix and suffix information.
       def undecorated_table_name(class_name = base_class.name)
@@ -332,6 +355,28 @@ module ActiveRecord
         else
           # STI subclasses always use their superclass' table.
           base.table_name
+        end
+      end
+
+      def warn_if_deprecated_type(column)
+        return if attributes_to_define_after_schema_loads.key?(column.name)
+        if column.respond_to?(:oid) && column.sql_type.start_with?("point")
+          if column.array?
+            array_arguments = ", array: true"
+          else
+            array_arguments = ""
+          end
+          ActiveSupport::Deprecation.warn(<<-WARNING.strip_heredoc)
+            The behavior of the `:point` type will be changing in Rails 5.1 to
+            return a `Point` object, rather than an `Array`. If you'd like to
+            keep the old behavior, you can add this line to #{self.name}:
+
+              attribute :#{column.name}, :legacy_point#{array_arguments}
+
+            If you'd like the new behavior today, you can add this line:
+
+              attribute :#{column.name}, :rails_5_1_point#{array_arguments}
+          WARNING
         end
       end
     end
