@@ -34,12 +34,14 @@ module ActionDispatch
 
         HTTP_ACCEPT HTTP_ACCEPT_CHARSET HTTP_ACCEPT_ENCODING
         HTTP_ACCEPT_LANGUAGE HTTP_CACHE_CONTROL HTTP_FROM
-        HTTP_NEGOTIATE HTTP_PRAGMA ].freeze
+        HTTP_NEGOTIATE HTTP_PRAGMA HTTP_CLIENT_IP
+        HTTP_X_FORWARDED_FOR HTTP_VERSION
+        ].freeze
 
     ENV_METHODS.each do |env|
       class_eval <<-METHOD, __FILE__, __LINE__ + 1
         def #{env.sub(/^HTTP_/n, '').downcase}  # def accept_charset
-          @env["#{env}"]                        #   @env["HTTP_ACCEPT_CHARSET"]
+          @env["#{env}".freeze]                 #   @env["HTTP_ACCEPT_CHARSET".freeze]
         end                                     # end
       METHOD
     end
@@ -103,11 +105,15 @@ module ActionDispatch
     # the application should use), this \method returns the overridden
     # value, not the original.
     def request_method
-      @request_method ||= check_method(env["REQUEST_METHOD"])
+      @request_method ||= check_method(super)
     end
 
     def routes # :nodoc:
       env["action_dispatch.routes".freeze]
+    end
+
+    def routes=(routes) # :nodoc:
+      env["action_dispatch.routes".freeze] = routes
     end
 
     def original_script_name # :nodoc:
@@ -118,10 +124,29 @@ module ActionDispatch
       env[_routes.env_key]
     end
 
+    def engine_script_name=(name) # :nodoc:
+      env[routes.env_key] = name.dup
+    end
+
     def request_method=(request_method) #:nodoc:
       if check_method(request_method)
         @request_method = env["REQUEST_METHOD"] = request_method
       end
+    end
+
+    def controller_instance # :nodoc:
+      env['action_controller.instance'.freeze]
+    end
+
+    def controller_instance=(controller) # :nodoc:
+      env['action_controller.instance'.freeze] = controller
+    end
+
+    def show_exceptions? # :nodoc:
+      # We're treating `nil` as "unset", and we want the default setting to be
+      # `true`.  This logic should be extracted to `env_config` and calculated
+      # once.
+      !(env['action_dispatch.show_exceptions'.freeze] == false)
     end
 
     # Returns a symbol form of the #request_method
@@ -210,6 +235,10 @@ module ActionDispatch
       @remote_ip ||= (@env["action_dispatch.remote_ip"] || ip).to_s
     end
 
+    def remote_ip=(remote_ip)
+      @env["action_dispatch.remote_ip".freeze] = remote_ip
+    end
+
     ACTION_DISPATCH_REQUEST_ID = "action_dispatch.request_id".freeze # :nodoc:
 
     # Returns the unique request id, which is based on either the X-Request-Id header that can
@@ -290,7 +319,7 @@ module ActionDispatch
 
     # Override Rack's GET method to support indifferent access
     def GET
-      @env["action_dispatch.request.query_parameters"] ||= Utils.deep_munge(normalize_encode_params(super || {}))
+      @env["action_dispatch.request.query_parameters"] ||= normalize_encode_params(super || {})
     rescue Rack::Utils::ParameterTypeError, Rack::Utils::InvalidParameterError => e
       raise ActionController::BadRequest.new(:query, e)
     end
@@ -298,7 +327,7 @@ module ActionDispatch
 
     # Override Rack's POST method to support indifferent access
     def POST
-      @env["action_dispatch.request.request_parameters"] ||= Utils.deep_munge(normalize_encode_params(super || {}))
+      @env["action_dispatch.request.request_parameters"] ||= normalize_encode_params(super || {})
     rescue Rack::Utils::ParameterTypeError, Rack::Utils::InvalidParameterError => e
       raise ActionController::BadRequest.new(:request, e)
     end
@@ -318,10 +347,13 @@ module ActionDispatch
       LOCALHOST =~ remote_addr && LOCALHOST =~ remote_ip
     end
 
-    protected
-      def parse_query(*)
-        Utils.deep_munge(super)
-      end
+    def request_parameters=(params)
+      env["action_dispatch.request.request_parameters".freeze] = params
+    end
+
+    def logger
+      env["action_dispatch.logger".freeze]
+    end
 
     private
       def check_method(name)

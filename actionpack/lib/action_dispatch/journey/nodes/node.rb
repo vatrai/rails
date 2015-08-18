@@ -14,15 +14,15 @@ module ActionDispatch
         end
 
         def each(&block)
-          Visitors::Each.new(block).accept(self)
+          Visitors::Each::INSTANCE.accept(self, block)
         end
 
         def to_s
-          Visitors::String.new.accept(self)
+          Visitors::String::INSTANCE.accept(self, '')
         end
 
         def to_dot
-          Visitors::Dot.new.accept(self)
+          Visitors::Dot::INSTANCE.accept(self)
         end
 
         def to_sym
@@ -30,7 +30,7 @@ module ActionDispatch
         end
 
         def name
-          left.tr '*:', ''
+          left.tr '*:'.freeze, ''.freeze
         end
 
         def type
@@ -39,10 +39,13 @@ module ActionDispatch
 
         def symbol?; false; end
         def literal?; false; end
+        def terminal?; false; end
+        def star?; false; end
       end
 
       class Terminal < Node # :nodoc:
         alias :symbol :left
+        def terminal?; true; end
       end
 
       class Literal < Terminal # :nodoc:
@@ -92,6 +95,7 @@ module ActionDispatch
       end
 
       class Star < Unary # :nodoc:
+        def star?; true; end
         def type; :STAR; end
 
         def name

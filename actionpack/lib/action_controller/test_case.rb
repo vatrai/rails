@@ -1,4 +1,5 @@
 require 'rack/session/abstract/id'
+require 'active_support/core_ext/hash/conversions'
 require 'active_support/core_ext/object/to_query'
 require 'active_support/core_ext/module/anonymous'
 require 'active_support/core_ext/hash/keys'
@@ -42,14 +43,12 @@ module ActionController
       @env["action_dispatch.request.request_parameters"] = params
     end
 
-    def assign_parameters(routes, controller_path, action, parameters = {})
-      parameters = parameters.symbolize_keys
-      generated_path, extra_keys = routes.generate_extras(parameters.merge(:controller => controller_path, :action => action))
+    def assign_parameters(routes, controller_path, action, parameters, generated_path, query_string_keys)
       non_path_parameters = {}
       path_parameters = {}
 
       parameters.each do |key, value|
-        if extra_keys.include?(key) || key == :action || key == :controller
+        if query_string_keys.include?(key)
           non_path_parameters[key] = value
         else
           if value.is_a?(Array)
@@ -139,9 +138,6 @@ module ActionController
     # Was the URL not found?
     alias_method :missing?, :not_found?
 
-    # Were we redirected?
-    alias_method :redirect?, :redirection?
-
     # Was there a server-side error?
     alias_method :error?, :server_error?
   end
@@ -172,6 +168,10 @@ module ActionController
 
     def destroy
       clear
+    end
+
+    def fetch(*args, &block)
+      @data.fetch(*args, &block)
     end
 
     private
@@ -230,7 +230,7 @@ module ActionController
   #      request. You can modify this object before sending the HTTP request. For example,
   #      you might want to set some session properties before sending a GET request.
   # <b>@response</b>::
-  #      An ActionController::TestResponse object, representing the response
+  #      An ActionDispatch::TestResponse object, representing the response
   #      of the last HTTP response. In the above example, <tt>@response</tt> becomes valid
   #      after calling +post+. If the various assert methods are not sufficient, then you
   #      may use this object to inspect the HTTP response in detail.
@@ -482,11 +482,13 @@ module ActionController
 
         @request.env['REQUEST_METHOD'] = http_method
 
-        controller_class_name = @controller.class.anonymous? ?
-          "anonymous" :
-          @controller.class.controller_path
+        parameters = parameters.symbolize_keys
 
-        @request.assign_parameters(@routes, controller_class_name, action.to_s, parameters)
+        generated_extras = @routes.generate_extras(parameters.merge(controller: controller_class_name, action: action.to_s))
+        generated_path = generated_path(generated_extras)
+        query_string_keys = query_parameter_names(generated_extras)
+
+        @request.assign_parameters(@routes, controller_class_name, action.to_s, parameters, generated_path, query_string_keys)
 
         @request.session.update(session) if session
         @request.flash.update(flash || {})
@@ -527,6 +529,18 @@ module ActionController
         @request.query_string = ''
 
         @response
+      end
+
+      def controller_class_name
+        @controller.class.anonymous? ? "anonymous" : @controller.class.controller_path
+      end
+
+      def generated_path(generated_extras)
+        generated_extras[0]
+      end
+
+      def query_parameter_names(generated_extras)
+        generated_extras[1] + [:controller, :action]
       end
 
       def setup_controller_request_and_response
