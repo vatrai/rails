@@ -11,7 +11,6 @@ require 'models/company'
 require 'models/computer'
 require 'models/course'
 require 'models/developer'
-require 'models/computer'
 require 'models/joke'
 require 'models/matey'
 require 'models/parrot'
@@ -259,18 +258,19 @@ class FixturesTest < ActiveRecord::TestCase
   def test_fixtures_are_set_up_with_database_env_variable
     db_url_tmp = ENV['DATABASE_URL']
     ENV['DATABASE_URL'] = "sqlite3::memory:"
-    ActiveRecord::Base.stubs(:configurations).returns({})
-    test_case = Class.new(ActiveRecord::TestCase) do
-      fixtures :accounts
+    ActiveRecord::Base.stub(:configurations, {}) do
+      test_case = Class.new(ActiveRecord::TestCase) do
+        fixtures :accounts
 
-      def test_fixtures
-        assert accounts(:signals37)
+        def test_fixtures
+          assert accounts(:signals37)
+        end
       end
+
+      result = test_case.new(:test_fixtures).run
+
+      assert result.passed?, "Expected #{result.name} to pass:\n#{result}"
     end
-
-    result = test_case.new(:test_fixtures).run
-
-    assert result.passed?, "Expected #{result.name} to pass:\n#{result}"
   ensure
     ENV['DATABASE_URL'] = db_url_tmp
   end
@@ -408,9 +408,11 @@ class FixturesWithoutInstantiationTest < ActiveRecord::TestCase
   end
 
   def test_reloading_fixtures_through_accessor_methods
+    topic = Struct.new(:title)
     assert_equal "The First Topic", topics(:first).title
-    @loaded_fixtures['topics']['first'].expects(:find).returns(stub(:title => "Fresh Topic!"))
-    assert_equal "Fresh Topic!", topics(:first, true).title
+    assert_called(@loaded_fixtures['topics']['first'], :find, returns: topic.new("Fresh Topic!")) do
+      assert_equal "Fresh Topic!", topics(:first, true).title
+    end
   end
 end
 

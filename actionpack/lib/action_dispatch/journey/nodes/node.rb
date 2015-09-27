@@ -41,6 +41,7 @@ module ActionDispatch
         def literal?; false; end
         def terminal?; false; end
         def star?; false; end
+        def cat?; false; end
       end
 
       class Terminal < Node # :nodoc:
@@ -72,11 +73,13 @@ module ActionDispatch
       class Symbol < Terminal # :nodoc:
         attr_accessor :regexp
         alias :symbol :regexp
+        attr_reader :name
 
         DEFAULT_EXP = /[^\.\/\?]+/
         def initialize(left)
           super
           @regexp = DEFAULT_EXP
+          @name = left.tr '*:'.freeze, ''.freeze
         end
 
         def default_regexp?
@@ -115,6 +118,7 @@ module ActionDispatch
       end
 
       class Cat < Binary # :nodoc:
+        def cat?; true; end
         def type; :CAT; end
       end
 

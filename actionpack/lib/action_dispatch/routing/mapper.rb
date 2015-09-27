@@ -1,10 +1,8 @@
-require 'active_support/core_ext/hash/except'
 require 'active_support/core_ext/hash/reverse_merge'
 require 'active_support/core_ext/hash/slice'
 require 'active_support/core_ext/enumerable'
 require 'active_support/core_ext/array/extract_options'
-require 'active_support/core_ext/module/remove_method'
-require 'active_support/inflector'
+require 'active_support/core_ext/regexp'
 require 'active_support/deprecation'
 require 'action_dispatch/routing/redirection'
 require 'action_dispatch/routing/endpoint'
@@ -150,9 +148,9 @@ module ActionDispatch
                             conditions,
                             required_defaults,
                             defaults,
-                            request_method)
+                            request_method,
+                            precedence)
 
-          route.precedence = precedence
           route
         end
 
@@ -187,18 +185,16 @@ module ActionDispatch
         def build_path(ast, requirements, anchor)
           pattern = Journey::Path::Pattern.new(ast, requirements, JOINED_SEPARATORS, anchor)
 
-          builder = Journey::GTG::Builder.new ast
-
           # Get all the symbol nodes followed by literals that are not the
           # dummy node.
-          symbols = ast.grep(Journey::Nodes::Symbol).find_all { |n|
-            builder.followpos(n).first.literal?
-          }
+          symbols = ast.find_all { |n|
+            n.cat? && n.left.symbol? && n.right.cat? && n.right.left.literal?
+          }.map(&:left)
 
           # Get all the symbol nodes preceded by literals.
-          symbols.concat ast.find_all(&:literal?).map { |n|
-            builder.followpos(n).first
-          }.find_all(&:symbol?)
+          symbols.concat ast.find_all { |n|
+            n.cat? && n.left.literal? && n.right.cat? && n.right.left.symbol?
+          }.map { |n| n.right.left }
 
           symbols.each { |x|
             x.regexp = /(?:#{Regexp.union(x.regexp, '-')})+/
@@ -285,12 +281,16 @@ module ActionDispatch
           end
 
           def app(blocks)
-            if to.respond_to?(:call)
-              Constraints.new(to, blocks, Constraints::CALL)
-            elsif blocks.any?
-              Constraints.new(dispatcher(defaults.key?(:controller)), blocks, Constraints::SERVE)
+            if to.is_a?(Class) && to < ActionController::Metal
+              Routing::RouteSet::StaticDispatcher.new to
             else
-              dispatcher(defaults.key?(:controller))
+              if to.respond_to?(:call)
+                Constraints.new(to, blocks, Constraints::CALL)
+              elsif blocks.any?
+                Constraints.new(dispatcher(defaults.key?(:controller)), blocks, Constraints::SERVE)
+              else
+                dispatcher(defaults.key?(:controller))
+              end
             end
           end
 
@@ -370,7 +370,7 @@ module ActionDispatch
           end
 
           def dispatcher(raise_on_name_error)
-            @set.dispatcher raise_on_name_error
+            Routing::RouteSet::Dispatcher.new raise_on_name_error
           end
       end
 
@@ -637,7 +637,7 @@ module ActionDispatch
 
         # Query if the following named route was already defined.
         def has_named_route?(name)
-          @set.named_routes.routes[name.to_sym]
+          @set.named_routes.key? name
         end
 
         private

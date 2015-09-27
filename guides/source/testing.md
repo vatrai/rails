@@ -50,7 +50,7 @@ By default, every Rails application has three environments: development, test, a
 
 Each environment's configuration can be modified similarly. In this case, we can modify our test environment by changing the options found in `config/environments/test.rb`.
 
-NOTE: Your test are run under RAILS_ENV=test.
+NOTE: Your tests are run under `RAILS_ENV=test`.
 
 ### Rails meets Minitest
 
@@ -302,7 +302,7 @@ specify to make your test failure messages clearer. It's not required.
 The above are a subset of assertions that minitest supports. For an exhaustive &
 more up-to-date list, please check
 [Minitest API documentation](http://docs.seattlerb.org/minitest/), specifically
-[`Minitest::Assertions`](http://docs.seattlerb.org/minitest/Minitest/Assertions.html)
+[`Minitest::Assertions`](http://docs.seattlerb.org/minitest/Minitest/Assertions.html).
 
 Because of the modular nature of the testing framework, it is possible to create your own assertions. In fact, that's exactly what Rails does. It includes some specialized assertions to make your life easier.
 
@@ -336,7 +336,8 @@ All the basic assertions such as `assert_equal` defined in `Minitest::Assertions
 
 Each of these classes include `Minitest::Assertions`, allowing us to use all of the basic assertions in our tests.
 
-NOTE: For more information on `Minitest`, refer to [Minitest](http://docs.seattlerb.org/minitest)
+NOTE: For more information on `Minitest`, refer to [its
+documentation](http://docs.seattlerb.org/minitest).
 
 ### The Rails Test Runner
 
@@ -355,7 +356,8 @@ Finished tests in 0.009262s, 107.9680 tests/s, 107.9680 assertions/s.
 
 This will run all test methods from the test case.
 
-You can also run a particular test method from the test case by providing the `-n` or `--name` flag and the `test method name`.
+You can also run a particular test method from the test case by providing the
+`-n` or `--name` flag and the test's method name.
 
 ```bash
 $ bin/rails test test/models/article_test.rb -n test_the_truth
@@ -469,13 +471,14 @@ user_<%= n %>:
 
 #### Fixtures in Action
 
-Rails by default automatically loads all fixtures from the `test/fixtures` directory for your models and controllers test. Loading involves three steps:
+Rails automatically loads all fixtures from the `test/fixtures` directory by
+default. Loading involves three steps:
 
 1. Remove any existing data from the table corresponding to the fixture
 2. Load the fixture data into the table
 3. Dump the fixture data into a method in case you want to access it directly
 
-TIP: In order to remove existing data from the database, Rails tries to disable referential integrity triggers (like foreign keys and check constraints). If you are getting annoying permission errors on running tests, make sure the database user has privilege to disable these triggers in testing environment. (In PostgreSQL, only superusers can disable all triggers. Read more about PostgreSQL permissions [here](http://blog.endpoint.com/2012/10/postgres-system-triggers-error.html))
+TIP: In order to remove existing data from the database, Rails tries to disable referential integrity triggers (like foreign keys and check constraints). If you are getting annoying permission errors on running tests, make sure the database user has privilege to disable these triggers in testing environment. (In PostgreSQL, only superusers can disable all triggers. Read more about PostgreSQL permissions [here](http://blog.endpoint.com/2012/10/postgres-system-triggers-error.html)).
 
 #### Fixtures are Active Record objects
 
@@ -505,7 +508,8 @@ Model Testing
 
 Model tests are used to test the various models of your application.
 
-For creating Rails model tests, we use the 'test/model' directory for your application. Rails provides a generator to create an model test skeleton for you.
+Rails model tests are stored under the `test/models` directory. Rails provides
+a generator to create a model test skeleton for you.
 
 ```bash
 $ bin/rails generate test_unit:model article title:string body:text
@@ -563,7 +567,8 @@ We'll start by generating our integration test skeleton:
 $ bin/rails generate integration_test blog_flow
 ```
 
-It should have created a test file placeholder for us, with the output of the previous command you should see:
+It should have created a test file placeholder for us. With the output of the
+previous command you should see:
 
 ```bash
       invoke  test_unit
@@ -745,9 +750,9 @@ end
 
 After a request has been made and processed, you will have 3 Hash objects ready for use:
 
-* `cookies` - Any cookies that are set.
-* `flash` - Any objects living in the flash.
-* `session` - Any object living in session variables.
+* `cookies` - Any cookies that are set
+* `flash` - Any objects living in the flash
+* `session` - Any object living in session variables
 
 As is the case with normal Hash objects, you can access the values by referencing the keys by string. You can also reference them by symbol name. For example:
 
@@ -1110,10 +1115,13 @@ require 'test_helper'
 
 class UserMailerTest < ActionMailer::TestCase
   test "invite" do
+    # Create the email and store it for further assertions
+    email = UserMailer.create_invite('me@example.com',
+                                     'friend@example.com', Time.now)
+
     # Send the email, then test that it got queued
     assert_emails 1 do
-      email = UserMailer.create_invite('me@example.com',
-                                       'friend@example.com', Time.now).deliver_now
+      email.deliver_now
     end
 
     # Test the body of the sent email contains what we expect it to

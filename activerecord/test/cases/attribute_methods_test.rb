@@ -1,7 +1,6 @@
 require "cases/helper"
 require 'models/minimalistic'
 require 'models/developer'
-require 'models/computer'
 require 'models/auto_id'
 require 'models/boolean'
 require 'models/computer'
@@ -67,8 +66,9 @@ class AttributeMethodsTest < ActiveRecord::TestCase
 
   def test_caching_nil_primary_key
     klass = Class.new(Minimalistic)
-    klass.expects(:reset_primary_key).returns(nil).once
-    2.times { klass.primary_key }
+    assert_called(klass, :reset_primary_key, returns: nil) do
+      2.times { klass.primary_key }
+    end
   end
 
   def test_attribute_keys_on_new_instance
@@ -175,7 +175,7 @@ class AttributeMethodsTest < ActiveRecord::TestCase
     assert_equal category_attrs , category.attributes_before_type_cast
   end
 
-  if current_adapter?(:MysqlAdapter)
+  if current_adapter?(:MysqlAdapter, :Mysql2Adapter)
     def test_read_attributes_before_type_cast_on_boolean
       bool = Boolean.create({ "value" => false })
       if RUBY_PLATFORM =~ /java/

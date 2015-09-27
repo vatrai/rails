@@ -1,3 +1,12 @@
+*   Fix displaying mailer previews on non local requests when config
+    `action_mailer.show_previews` is set
+
+    *Wojciech Wnętrzak*
+
+*   `rails server` will now honour the `PORT` environment variable
+
+    *David Cornu*
+
 *   Plugins generated using `rails plugin new` are now generated with the
     version number set to 0.1.0.
 

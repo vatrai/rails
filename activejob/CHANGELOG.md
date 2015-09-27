@@ -1,3 +1,12 @@
+*   Add job priorities to Active Job.
+
+    *wvengen*
+
+*   Implement a simple `AsyncJob` processor and associated `AsyncAdapter` that
+    queue jobs to a `concurrent-ruby` thread pool.
+
+    *Jerry D'Antonio*
+
 *   Implement `provider_job_id` for `queue_classic` adapter. This requires the
     latest, currently unreleased, version of queue_classic.
 

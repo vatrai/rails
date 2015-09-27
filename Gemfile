@@ -6,7 +6,8 @@ gemspec
 gem 'rake', '>= 10.3'
 
 # Active Job depends on the URI::GID::MissingModelIDError, which isn't released yet.
-gem 'globalid', github: 'rails/globalid'
+gem 'globalid', github: 'rails/globalid', branch: 'master'
+gem 'rack', github: 'rack/rack', branch: 'master'
 
 # This needs to be with require false as it is
 # loaded after loading the test library to
@@ -16,12 +17,13 @@ gem 'mocha', '~> 0.14', require: false
 gem 'rack-cache', '~> 1.2'
 gem 'jquery-rails', github: 'rails/jquery-rails', branch: 'master'
 gem 'coffee-rails', '~> 4.1.0'
-gem 'turbolinks'
+gem 'turbolinks', github: 'rails/turbolinks', branch: 'master'
 gem 'arel', github: 'rails/arel', branch: 'master'
-gem 'mail', github: 'mikel/mail'
+gem 'mail', github: 'mikel/mail', branch: 'master'
 
-gem 'sprockets', '~> 3.0.0.rc.1'
+gem 'sprockets', github: 'rails/sprockets', branch: 'master'
 gem 'sprockets-rails', github: 'rails/sprockets-rails', branch: 'master'
+gem 'sass-rails', github: 'rails/sass-rails', branch: 'master'
 
 # require: false so bcrypt is loaded only when has_secure_password is used.
 # This is to avoid ActiveModel (and by extension the entire framework)
@@ -31,6 +33,7 @@ gem 'bcrypt', '~> 3.1.10', require: false
 # This needs to be with require false to avoid
 # it being automatically loaded by sprockets
 gem 'uglifier', '>= 1.3.0', require: false
+gem 'sass', '>= 3.3', require: false
 
 group :doc do
   gem 'sdoc', '~> 0.4.0'
@@ -49,7 +52,7 @@ group :job do
   gem 'sidekiq', require: false
   gem 'sucker_punch', require: false
   gem 'delayed_job', require: false
-  gem 'queue_classic', github: "QueueClassic/queue_classic", require: false, platforms: :ruby
+  gem 'queue_classic', github: "QueueClassic/queue_classic", branch: 'master', require: false, platforms: :ruby
   gem 'sneakers', require: false
   gem 'que', require: false
   gem 'backburner', require: false
@@ -76,7 +79,7 @@ group :test do
 end
 
 platforms :ruby do
-  gem 'nokogiri', '>= 1.4.5'
+  gem 'nokogiri', '>= 1.6.7.rc3'
 
   # Needed for compiling the ActionDispatch::Journey parser
   gem 'racc', '>=1.4.6', require: false
@@ -87,7 +90,7 @@ platforms :ruby do
   group :db do
     gem 'pg', '>= 0.18.0'
     gem 'mysql', '>= 2.9.0'
-    gem 'mysql2', '>= 0.3.18'
+    gem 'mysql2', '>= 0.4.0'
   end
 end
 
@@ -124,3 +127,4 @@ end
 
 # A gem necessary for ActiveRecord tests with IBM DB
 gem 'ibm_db' if ENV['IBM_DB']
+gem 'tzinfo-data', platforms: [:mingw, :mswin, :x64_mingw, :jruby]

@@ -11,10 +11,17 @@ module ActionController
       # Documentation at ActionController::Renderer#render
       delegate :render, to: :renderer
 
-      # Returns a renderer class (inherited from ActionController::Renderer)
+      # Returns a renderer instance (inherited from ActionController::Renderer)
       # for the controller.
-      def renderer
-        @renderer ||= Renderer.for(self)
+      attr_reader :renderer
+
+      def setup_renderer! # :nodoc:
+        @renderer = Renderer.for(self)
+      end
+
+      def inherited(klass)
+        klass.setup_renderer!
+        super
       end
     end
 
@@ -56,13 +63,13 @@ module ActionController
       nil
     end
 
-    def _process_format(format, options = {})
-      super
+    def _set_html_content_type
+      self.content_type = Mime::Type[:HTML].to_s
+    end
 
-      if options[:plain]
-        self.content_type = Mime::TEXT
-      else
-        self.content_type ||= format.to_s
+    def _set_rendered_content_type(format)
+      unless response.content_type
+        self.content_type = format.to_s
       end
     end
 

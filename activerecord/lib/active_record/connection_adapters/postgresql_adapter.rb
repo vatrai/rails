@@ -201,13 +201,18 @@ module ActiveRecord
         true
       end
 
+      def supports_json?
+        postgresql_version >= 90200
+      end
+
       def index_algorithms
         { concurrently: 'CONCURRENTLY' }
       end
 
       class StatementPool < ConnectionAdapters::StatementPool
         def initialize(connection, max)
-          super
+          super(max)
+          @connection = connection
           @counter = 0
         end
 
@@ -756,7 +761,7 @@ module ActiveRecord
         end
 
         def extract_table_ref_from_insert_sql(sql) # :nodoc:
-          sql[/into\s+([^\(]*).*values\s*\(/im]
+          sql[/into\s("[A-Za-z0-9_."\[\]\s]+"|[A-Za-z0-9_."\[\]]+)\s*/im]
           $1.strip if $1
         end
 

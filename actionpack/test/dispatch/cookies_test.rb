@@ -321,10 +321,12 @@ class CookiesTest < ActionController::TestCase
   end
 
   def test_setting_cookie_with_secure_when_always_write_cookie_is_true
-    ActionDispatch::Cookies::CookieJar.any_instance.stubs(:always_write_cookie).returns(true)
+    old_cookie, @request.cookie_jar.always_write_cookie = @request.cookie_jar.always_write_cookie, true
     get :authenticate_with_secure
     assert_cookie_header "user_name=david; path=/; secure"
     assert_equal({"user_name" => "david"}, @response.cookies)
+  ensure
+    @request.cookie_jar.always_write_cookie = old_cookie
   end
 
   def test_not_setting_cookie_with_secure
@@ -649,6 +651,15 @@ class CookiesTest < ActionController::TestCase
       get :tampered_cookies
       assert_response :success
     end
+  end
+
+  def test_cookie_jar_mutated_by_request_persists_on_future_requests
+    get :authenticate
+    cookie_jar = @request.cookie_jar
+    cookie_jar.signed[:user_id] = 123
+    assert_equal ["user_name", "user_id"], @request.cookie_jar.instance_variable_get(:@cookies).keys
+    get :get_signed_cookie
+    assert_equal ["user_name", "user_id"], @request.cookie_jar.instance_variable_get(:@cookies).keys
   end
 
   def test_raises_argument_error_if_missing_secret
