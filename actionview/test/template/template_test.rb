@@ -1,4 +1,6 @@
 # encoding: US-ASCII
+# frozen_string_literal: true
+
 require "abstract_unit"
 require "logger"
 
@@ -16,10 +18,10 @@ class TestERBTemplate < ActiveSupport::TestCase
     attr_accessor :formats
   end
 
-  class Context
-    def initialize
+  class Context < ActionView::Base
+    def initialize(*)
+      super
       @output_buffer = "original"
-      @virtual_path = nil
     end
 
     def hello
@@ -32,10 +34,12 @@ class TestERBTemplate < ActiveSupport::TestCase
 
     def partial
       ActionView::Template.new(
-        "<%= @virtual_path %>",
+        "<%= @current_template.virtual_path %>",
         "partial",
         ERBHandler,
-        :virtual_path => "partial"
+        virtual_path: "partial",
+        format: :html,
+        locals: []
       )
     end
 
@@ -52,8 +56,9 @@ class TestERBTemplate < ActiveSupport::TestCase
     end
   end
 
-  def new_template(body = "<%= hello %>", details = { format: :html })
-    ActionView::Template.new(body, "hello template", details.fetch(:handler) { ERBHandler }, {:virtual_path => "hello"}.merge!(details))
+  def new_template(body = "<%= hello %>", details = {})
+    details = { format: :html, locals: [] }.merge details
+    ActionView::Template.new(body.dup, "hello template", details.delete(:handler) || ERBHandler, **{ virtual_path: "hello" }.merge!(details))
   end
 
   def render(locals = {})
@@ -61,7 +66,8 @@ class TestERBTemplate < ActiveSupport::TestCase
   end
 
   def setup
-    @context = Context.new
+    @context = Context.with_empty_template_cache.empty
+    super
   end
 
   def test_basic_template
@@ -80,26 +86,25 @@ class TestERBTemplate < ActiveSupport::TestCase
   end
 
   def test_raw_template
-    @template = new_template("<%= hello %>", :handler => ActionView::Template::Handlers::Raw.new)
+    @template = new_template("<%= hello %>", handler: ActionView::Template::Handlers::Raw.new)
     assert_equal "<%= hello %>", render
   end
 
-  def test_template_loses_its_source_after_rendering
+  def test_template_does_not_lose_its_source_after_rendering
     @template = new_template
     render
-    assert_nil @template.source
+    assert_equal "<%= hello %>", @template.source
   end
 
   def test_template_does_not_lose_its_source_after_rendering_if_it_does_not_have_a_virtual_path
-    @template = new_template("Hello", :virtual_path => nil)
+    @template = new_template("Hello", virtual_path: nil)
     render
     assert_equal "Hello", @template.source
   end
 
   def test_locals
-    @template = new_template("<%= my_local %>")
-    @template.locals = [:my_local]
-    assert_equal "I am a local", render(:my_local => "I am a local")
+    @template = new_template("<%= my_local %>", locals: [:my_local])
+    assert_equal "I am a local", render(my_local: "I am a local")
   end
 
   def test_restores_buffer
@@ -109,32 +114,16 @@ class TestERBTemplate < ActiveSupport::TestCase
   end
 
   def test_virtual_path
-    @template = new_template("<%= @virtual_path %>" \
+    @template = new_template("<%= @current_template.virtual_path %>" \
                              "<%= partial.render(self, {}) %>" \
-                             "<%= @virtual_path %>")
+                             "<%= @current_template.virtual_path %>")
     assert_equal "hellopartialhello", render
   end
 
-  def test_refresh_with_templates
-    @template = new_template("Hello", :virtual_path => "test/foo/bar")
-    @template.locals = [:key]
-    assert_called_with(@context.lookup_context, :find_template,["bar", %w(test/foo), false, [:key]], returns: "template") do
-      assert_equal "template", @template.refresh(@context)
-    end
-  end
-
-  def test_refresh_with_partials
-    @template = new_template("Hello", :virtual_path => "test/_foo")
-    @template.locals = [:key]
-    assert_called_with(@context.lookup_context, :find_template,[ "foo", %w(test), true, [:key]], returns: "partial") do
-      assert_equal "partial", @template.refresh(@context)
-    end
-  end
-
-  def test_refresh_raises_an_error_without_virtual_path
-    @template = new_template("Hello", :virtual_path => nil)
-    assert_raise RuntimeError do
-      @template.refresh(@context)
+  def test_refresh_is_deprecated
+    @template = new_template("Hello", virtual_path: "test/foo/bar", locals: [:key])
+    assert_deprecated do
+      assert_same @template, @template.refresh(@context)
     end
   end
 
@@ -171,14 +160,14 @@ class TestERBTemplate < ActiveSupport::TestCase
   # inside Rails.
   def test_lying_with_magic_comment
     assert_raises(ActionView::Template::Error) do
-      @template = new_template("# encoding: UTF-8\nhello \xFCmlat", :virtual_path => nil)
+      @template = new_template("# encoding: UTF-8\nhello \xFCmlat", virtual_path: nil)
       render
     end
   end
 
   def test_encoding_can_be_specified_with_magic_comment_in_erb
     with_external_encoding Encoding::UTF_8 do
-      @template = new_template("<%# encoding: ISO-8859-1 %>hello \xFCmlat", :virtual_path => nil)
+      @template = new_template("<%# encoding: ISO-8859-1 %>hello \xFCmlat", virtual_path: nil)
       assert_equal Encoding::UTF_8, render.encoding
       assert_equal "hello \u{fc}mlat", render
     end
@@ -186,42 +175,19 @@ class TestERBTemplate < ActiveSupport::TestCase
 
   def test_error_when_template_isnt_valid_utf8
     e = assert_raises ActionView::Template::Error do
-      @template = new_template("hello \xFCmlat", :virtual_path => nil)
+      @template = new_template("hello \xFCmlat", virtual_path: nil)
       render
     end
-    assert_match(/\xFC/, e.message)
+    # Hack: We write the regexp this way because the parser of RuboCop
+    # errs with /\xFC/.
+    assert_match(Regexp.new("\xFC"), e.message)
   end
 
-  def test_not_eligible_for_collection_caching_without_cache_call
-    [
-      "<%= 'Hello' %>",
-      "<% cache_customer = 42 %>",
-      "<% cache customer.name do %><% end %>",
-      "<% my_cache customer do %><% end %>"
-    ].each do |body|
-      template = new_template(body, virtual_path: "test/foo/_customer")
-      assert_not template.eligible_for_collection_caching?, "Template #{body.inspect} should not be eligible for collection caching"
-    end
-  end
-
-  def test_eligible_for_collection_caching_with_cache_call_or_explicit
-    [
-      "<% cache customer do %><% end %>",
-      "<% cache(customer) do %><% end %>",
-      "<% cache( customer) do %><% end %>",
-      "<% cache( customer ) do %><% end %>",
-      "<%cache customer do %><% end %>",
-      "<%   cache   customer    do %><% end %>",
-      "  <% cache customer do %>\n<% end %>\n",
-      "<%# comment %><% cache customer do %><% end %>",
-      "<%# comment %>\n<% cache customer do %><% end %>",
-      "<%# comment\n line 2\n line 3 %>\n<% cache customer do %><% end %>",
-      "<%# comment 1 %>\n<%# comment 2 %>\n<% cache customer do %><% end %>",
-      "<%# comment 1 %>\n<%# Template Collection: customer %>\n<% my_cache customer do %><% end %>"
-    ].each do |body|
-      template = new_template(body, virtual_path: "test/foo/_customer")
-      assert template.eligible_for_collection_caching?, "Template #{body.inspect} should be eligible for collection caching"
-    end
+  def test_template_is_marshalable
+    template = new_template
+    serialized = Marshal.load(Marshal.dump(template))
+    assert_equal template.identifier, serialized.identifier
+    assert_equal template.source, serialized.source
   end
 
   def with_external_encoding(encoding)
@@ -231,5 +197,15 @@ class TestERBTemplate < ActiveSupport::TestCase
     yield
   ensure
     silence_warnings { Encoding.default_external = old }
+  end
+
+  def test_short_identifier
+    @template = new_template("hello")
+    assert_equal "hello template", @template.short_identifier
+  end
+
+  def test_template_inspect
+    @template = new_template("hello")
+    assert_equal "#<ActionView::Template hello template locals=[]>", @template.inspect
   end
 end

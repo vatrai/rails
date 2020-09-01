@@ -1,4 +1,6 @@
-ARGV << '--help' if ARGV.empty?
+# frozen_string_literal: true
+
+require "rails/command"
 
 aliases = {
   "g"  => "generate",
@@ -7,12 +9,10 @@ aliases = {
   "s"  => "server",
   "db" => "dbconsole",
   "r"  => "runner",
-  "t"  => "test",
+  "t"  => "test"
 }
 
 command = ARGV.shift
 command = aliases[command] || command
 
-require 'rails/commands/commands_tasks'
-
-Rails::CommandsTasks.new(ARGV).run_command!(command)
+Rails::Command.invoke command, ARGV

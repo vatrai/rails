@@ -1,5 +1,7 @@
+# frozen_string_literal: true
+
 module ActionView
-  module Helpers
+  module Helpers #:nodoc:
     # = Action View Rendering
     #
     # Implements methods that allow rendering from a view context.
@@ -11,7 +13,6 @@ module ActionView
       # * <tt>:partial</tt> - See <tt>ActionView::PartialRenderer</tt>.
       # * <tt>:file</tt> - Renders an explicit template file (this used to be the old default), add :locals to pass in those.
       # * <tt>:inline</tt> - Renders an inline template similar to how it's done in the controller.
-      # * <tt>:text</tt> - Renders the text passed in out.
       # * <tt>:plain</tt> - Renders the text passed in out. Setting the content
       #   type as <tt>text/plain</tt>.
       # * <tt>:html</tt> - Renders the HTML safe string passed in out, otherwise
@@ -21,18 +22,28 @@ module ActionView
       #   type of <tt>text/plain</tt> from <tt>ActionDispatch::Response</tt>
       #   object.
       #
-      # If no options hash is passed or :update specified, the default is to render a partial and use the second parameter
-      # as the locals hash.
+      # If no <tt>options</tt> hash is passed or if <tt>:update</tt> is specified, then:
+      #
+      # If an object responding to `render_in` is passed, `render_in` is called on the object,
+      # passing in the current view context.
+      #
+      # Otherwise, a partial is rendered using the second parameter as the locals hash.
       def render(options = {}, locals = {}, &block)
         case options
         when Hash
-          if block_given?
-            view_renderer.render_partial(self, options.merge(:partial => options[:layout]), &block)
-          else
-            view_renderer.render(self, options)
+          in_rendering_context(options) do |renderer|
+            if block_given?
+              view_renderer.render_partial(self, options.merge(partial: options[:layout]), &block)
+            else
+              view_renderer.render(self, options)
+            end
           end
         else
-          view_renderer.render_partial(self, :partial => options, :locals => locals, &block)
+          if options.respond_to?(:render_in)
+            options.render_in(self, &block)
+          else
+            view_renderer.render_partial(self, partial: options, locals: locals, &block)
+          end
         end
       end
 

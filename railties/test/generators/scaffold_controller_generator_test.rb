@@ -1,5 +1,7 @@
-require 'generators/generators_test_helper'
-require 'rails/generators/rails/scaffold_controller/scaffold_controller_generator'
+# frozen_string_literal: true
+
+require "generators/generators_test_helper"
+require "rails/generators/rails/scaffold_controller/scaffold_controller_generator"
 
 module Unknown
   module Generators
@@ -9,6 +11,8 @@ end
 class ScaffoldControllerGeneratorTest < Rails::Generators::TestCase
   include GeneratorsTestHelper
   arguments %w(User name:string age:integer)
+
+  setup :copy_routes
 
   def test_controller_skeleton_is_created
     run_generator
@@ -56,7 +60,7 @@ class ScaffoldControllerGeneratorTest < Rails::Generators::TestCase
 
     assert_file "app/controllers/users_controller.rb" do |content|
       assert_match(/def user_params/, content)
-      assert_match(/params\[:user\]/, content)
+      assert_match(/params\.fetch\(:user, \{\}\)/, content)
     end
   end
 
@@ -75,6 +79,40 @@ class ScaffoldControllerGeneratorTest < Rails::Generators::TestCase
     assert_file "app/controllers/line_items_controller.rb" do |content|
       assert_match(/def line_item_params/, content)
       assert_match(/params\.require\(:line_item\)\.permit\(:product_id, :product_type\)/, content)
+    end
+  end
+
+  def test_controller_permit_attachment_attributes
+    run_generator ["Message", "video:attachment", "photos:attachments"]
+
+    assert_file "app/controllers/messages_controller.rb" do |content|
+      assert_match(/def message_params/, content)
+      assert_match(/params\.require\(:message\)\.permit\(:video, photos: \[\]\)/, content)
+    end
+  end
+
+  def test_controller_permit_attachments_attributes_only
+    run_generator ["Message", "photos:attachments"]
+
+    assert_file "app/controllers/messages_controller.rb" do |content|
+      assert_match(/def message_params/, content)
+      assert_match(/params\.require\(:message\)\.permit\(photos: \[\]\)/, content)
+    end
+  end
+
+  def test_controller_route_are_added
+    run_generator ["Message", "photos:attachments"]
+
+    assert_file "config/routes.rb" do |route|
+      assert_match(/resources :messages$/, route)
+    end
+  end
+
+  def test_controller_route_are_skipped
+    run_generator ["Message", "photos:attachments", "--skip-routes"]
+
+    assert_file "config/routes.rb" do |route|
+      assert_no_match(/resources :messages$/, route)
     end
   end
 
@@ -104,10 +142,10 @@ class ScaffoldControllerGeneratorTest < Rails::Generators::TestCase
     run_generator ["User", "name:string", "age:integer", "organization:references{polymorphic}"]
 
     assert_file "test/controllers/users_controller_test.rb" do |content|
-      assert_match(/class UsersControllerTest < ActionController::TestCase/, content)
+      assert_match(/class UsersControllerTest < ActionDispatch::IntegrationTest/, content)
       assert_match(/test "should get index"/, content)
-      assert_match(/post :create, params: \{ user: \{ age: @user\.age, name: @user\.name, organization_id: @user\.organization_id, organization_type: @user\.organization_type \} \}/, content)
-      assert_match(/patch :update, params: \{ id: @user, user: \{ age: @user\.age, name: @user\.name, organization_id: @user\.organization_id, organization_type: @user\.organization_type \} \}/, content)
+      assert_match(/post users_url, params: \{ user: \{ age: @user\.age, name: @user\.name, organization_id: @user\.organization_id, organization_type: @user\.organization_type \} \}/, content)
+      assert_match(/patch user_url\(@user\), params: \{ user: \{ age: @user\.age, name: @user\.name, organization_id: @user\.organization_id, organization_type: @user\.organization_type \} \}/, content)
     end
   end
 
@@ -115,10 +153,10 @@ class ScaffoldControllerGeneratorTest < Rails::Generators::TestCase
     run_generator ["User"]
 
     assert_file "test/controllers/users_controller_test.rb" do |content|
-      assert_match(/class UsersControllerTest < ActionController::TestCase/, content)
+      assert_match(/class UsersControllerTest < ActionDispatch::IntegrationTest/, content)
       assert_match(/test "should get index"/, content)
-      assert_match(/post :create, params: \{ user: \{  \} \}/, content)
-      assert_match(/patch :update, params: \{ id: @user, user: \{  \} \}/, content)
+      assert_match(/post users_url, params: \{ user: \{  \} \}/, content)
+      assert_match(/patch user_url\(@user\), params: \{ user: \{  \} \}/, content)
     end
   end
 
@@ -172,6 +210,29 @@ class ScaffoldControllerGeneratorTest < Rails::Generators::TestCase
       assert_instance_method :index, content do |m|
         assert_match("@users = User.all", m)
       end
+
+      assert_instance_method :create, content do |m|
+        assert_match("redirect_to [:admin, @user]", m)
+      end
+
+      assert_instance_method :update, content do |m|
+        assert_match("redirect_to [:admin, @user]", m)
+      end
+    end
+
+    assert_file "app/views/admin/users/index.html.erb" do |content|
+      assert_match("'Show', [:admin, user]", content)
+      assert_match("'Edit', edit_admin_user_path(user)", content)
+      assert_match("'Destroy', [:admin, user]", content)
+      assert_match("'New User', new_admin_user_path", content)
+    end
+
+    assert_file "app/views/admin/users/new.html.erb" do |content|
+      assert_match("'Back', admin_users_path", content)
+    end
+
+    assert_file "app/views/admin/users/_form.html.erb" do |content|
+      assert_match("model: [:admin, user]", content)
     end
   end
 
@@ -182,6 +243,7 @@ class ScaffoldControllerGeneratorTest < Rails::Generators::TestCase
 
     Dir.chdir(engine_path) do
       quietly { `bin/rails g controller dashboard foo` }
+      quietly { `bin/rails db:migrate RAILS_ENV=test` }
       assert_match(/2 runs, 2 assertions, 0 failures, 0 errors/, `bin/rails test 2>&1`)
     end
   end
@@ -193,6 +255,7 @@ class ScaffoldControllerGeneratorTest < Rails::Generators::TestCase
 
     Dir.chdir(engine_path) do
       quietly { `bin/rails g controller dashboard foo` }
+      quietly { `bin/rails db:migrate RAILS_ENV=test` }
       assert_match(/2 runs, 2 assertions, 0 failures, 0 errors/, `bin/rails test 2>&1`)
     end
   end
@@ -230,17 +293,40 @@ class ScaffoldControllerGeneratorTest < Rails::Generators::TestCase
         assert_match(/@user\.destroy/, m)
       end
     end
+
+    assert_no_file "app/views/users/index.html.erb"
+    assert_no_file "app/views/users/edit.html.erb"
+    assert_no_file "app/views/users/show.html.erb"
+    assert_no_file "app/views/users/new.html.erb"
+    assert_no_file "app/views/users/_form.html.erb"
   end
 
   def test_api_controller_tests
     run_generator ["User", "name:string", "age:integer", "organization:references{polymorphic}", "--api"]
 
     assert_file "test/controllers/users_controller_test.rb" do |content|
-      assert_match(/class UsersControllerTest < ActionController::TestCase/, content)
+      assert_match(/class UsersControllerTest < ActionDispatch::IntegrationTest/, content)
       assert_match(/test "should get index"/, content)
-      assert_match(/post :create, params: \{ user: \{ age: @user\.age, name: @user\.name, organization_id: @user\.organization_id, organization_type: @user\.organization_type \} \}/, content)
-      assert_match(/patch :update, params: \{ id: @user, user: \{ age: @user\.age, name: @user\.name, organization_id: @user\.organization_id, organization_type: @user\.organization_type \} \}/, content)
+      assert_match(/post users_url, params: \{ user: \{ age: @user\.age, name: @user\.name, organization_id: @user\.organization_id, organization_type: @user\.organization_type \} \}, as: :json/, content)
+      assert_match(/patch user_url\(@user\), params: \{ user: \{ age: @user\.age, name: @user\.name, organization_id: @user\.organization_id, organization_type: @user\.organization_type \} \}, as: :json/, content)
       assert_no_match(/assert_redirected_to/, content)
     end
+  end
+
+  def test_api_only_generates_params_for_attachments
+    run_generator ["Message", "video:attachment", "photos:attachments", "--api"]
+
+    assert_file "app/controllers/messages_controller.rb" do |content|
+      assert_match(/def message_params/, content)
+      assert_match(/params\.require\(:message\)\.permit\(:video, photos: \[\]\)/, content)
+    end
+  end
+
+  def test_check_class_collision
+    Object.send :const_set, :UsersController, Class.new
+    content = capture(:stderr) { run_generator }
+    assert_match(/The name 'UsersController' is either already used in your application or reserved/, content)
+  ensure
+    Object.send :remove_const, :UsersController
   end
 end

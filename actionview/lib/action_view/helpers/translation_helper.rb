@@ -1,12 +1,21 @@
-require 'action_view/helpers/tag_helper'
-require 'active_support/core_ext/string/access'
-require 'i18n/exceptions'
+# frozen_string_literal: true
+
+require "action_view/helpers/tag_helper"
+require "active_support/core_ext/string/access"
+require "i18n/exceptions"
 
 module ActionView
   # = Action View Translation Helpers
-  module Helpers
+  module Helpers #:nodoc:
     module TranslationHelper
+      extend ActiveSupport::Concern
+
       include TagHelper
+
+      included do
+        mattr_accessor :debug_missing_translation, default: true
+      end
+
       # Delegates to <tt>I18n#translate</tt> but also performs three additional
       # functions.
       #
@@ -48,13 +57,21 @@ module ActionView
       # that include HTML tags so that you know what kind of output to expect
       # when you call translate in a template and translators know which keys
       # they can provide HTML values for.
-      def translate(key, options = {})
-        options = options.dup
-        has_default = options.has_key?(:default)
-        remaining_defaults = Array(options.delete(:default)).compact
-
-        if has_default && !remaining_defaults.first.kind_of?(Symbol)
-          options[:default] = remaining_defaults
+      #
+      # To access the translated text along with the fully resolved
+      # translation key, <tt>translate</tt> accepts a block:
+      #
+      #     <%= translate(".relative_key") do |translation, resolved_key| %>
+      #       <span title="<%= resolved_key %>"><%= translation %></span>
+      #     <% end %>
+      #
+      # This enables annotate translated text to be aware of the scope it was
+      # resolved against.
+      #
+      def translate(key, **options)
+        unless options[:default].nil?
+          remaining_defaults = Array.wrap(options.delete(:default)).compact
+          options[:default] = remaining_defaults unless remaining_defaults.first.kind_of?(Symbol)
         end
 
         # If the user has explicitly decided to NOT raise errors, pass that option to I18n.
@@ -68,52 +85,78 @@ module ActionView
           i18n_raise = true
         end
 
+        fully_resolved_key = scope_key_by_partial(key)
+
         if html_safe_translation_key?(key)
           html_safe_options = options.dup
+
           options.except(*I18n::RESERVED_KEYS).each do |name, value|
             unless name == :count && value.is_a?(Numeric)
               html_safe_options[name] = ERB::Util.html_escape(value.to_s)
             end
           end
-          translation = I18n.translate(scope_key_by_partial(key), html_safe_options.merge(raise: i18n_raise))
 
-          translation.respond_to?(:html_safe) ? translation.html_safe : translation
+          translation = I18n.translate(fully_resolved_key, **html_safe_options.merge(raise: i18n_raise))
+
+          if translation.respond_to?(:map)
+            translated_text = translation.map { |element| element.respond_to?(:html_safe) ? element.html_safe : element }
+          else
+            translated_text = translation.respond_to?(:html_safe) ? translation.html_safe : translation
+          end
         else
-          I18n.translate(scope_key_by_partial(key), options.merge(raise: i18n_raise))
+          translated_text = I18n.translate(fully_resolved_key, **options.merge(raise: i18n_raise))
+        end
+
+        if block_given?
+          yield(translated_text, fully_resolved_key)
+        else
+          translated_text
         end
       rescue I18n::MissingTranslationData => e
         if remaining_defaults.present?
-          translate remaining_defaults.shift, options.merge(default: remaining_defaults)
+          translate remaining_defaults.shift, **options.merge(default: remaining_defaults)
         else
           raise e if raise_error
 
           keys = I18n.normalize_keys(e.locale, e.key, e.options[:scope])
-          title = "translation missing: #{keys.join('.')}"
+          title = +"translation missing: #{keys.join('.')}"
 
-          interpolations = options.except(:default)
+          interpolations = options.except(:default, :scope)
+
           if interpolations.any?
-            title << ", " << interpolations.map { |k, v| "#{k}: #{ERB::Util.html_escape(v)}" }.join(', ')
+            title << ", " << interpolations.map { |k, v| "#{k}: #{ERB::Util.html_escape(v)}" }.join(", ")
           end
 
-          content_tag('span', keys.last.to_s.titleize, class: 'translation_missing', title: title)
+          return title unless ActionView::Base.debug_missing_translation
+
+          translated_fallback = content_tag("span", keys.last.to_s.titleize, class: "translation_missing", title: title)
+
+          if block_given?
+            yield(translated_fallback, scope_key_by_partial(key))
+          else
+            translated_fallback
+          end
         end
       end
       alias :t :translate
 
       # Delegates to <tt>I18n.localize</tt> with no additional functionality.
       #
-      # See http://rubydoc.info/github/svenfuchs/i18n/master/I18n/Backend/Base:localize
+      # See https://www.rubydoc.info/github/svenfuchs/i18n/master/I18n/Backend/Base:localize
       # for more information.
-      def localize(*args)
-        I18n.localize(*args)
+      def localize(object, **options)
+        I18n.localize(object, **options)
       end
       alias :l :localize
 
       private
         def scope_key_by_partial(key)
-          if key.to_s.first == "."
-            if @virtual_path
-              @virtual_path.gsub(%r{/_?}, ".") + key.to_s
+          stringified_key = key.to_s
+          if stringified_key.start_with?(".")
+            if @current_template&.virtual_path
+              @_scope_key_by_partial_cache ||= {}
+              @_scope_key_by_partial_cache[@current_template.virtual_path] ||= @current_template.virtual_path.gsub(%r{/_?}, ".")
+              "#{@_scope_key_by_partial_cache[@current_template.virtual_path]}#{stringified_key}"
             else
               raise "Cannot use t(#{key.inspect}) shortcut because path is not available"
             end
@@ -123,7 +166,7 @@ module ActionView
         end
 
         def html_safe_translation_key?(key)
-          key.to_s =~ /(\b|_|\.)html$/
+          /(?:_|\b)html\z/.match?(key.to_s)
         end
     end
   end

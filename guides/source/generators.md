@@ -1,4 +1,4 @@
-**DO NOT READ THIS FILE ON GITHUB, GUIDES ARE PUBLISHED ON http://guides.rubyonrails.org.**
+**DO NOT READ THIS FILE ON GITHUB, GUIDES ARE PUBLISHED ON https://guides.rubyonrails.org.**
 
 Creating and Customizing Rails Generators & Templates
 =====================================================
@@ -21,7 +21,7 @@ After reading this guide, you will know:
 First Contact
 -------------
 
-When you create an application using the `rails` command, you are in fact using a Rails generator. After that, you can get a list of all available generators by just invoking `rails generate`:
+When you create an application using the `rails` command, you are in fact using a Rails generator. After that, you can get a list of all available generators by just invoking `bin/rails generate`:
 
 ```bash
 $ rails new myapp
@@ -29,7 +29,9 @@ $ cd myapp
 $ bin/rails generate
 ```
 
-You will get a list of all generators that comes with Rails. If you need a detailed description of the helper generator, for example, you can simply do:
+NOTE: To create a rails application we use the `rails` global command, the rails gem installed via `gem install rails`. When inside the directory of your application, we use  the command `bin/rails` which uses the bundled rails inside this application.
+
+You will get a list of all generators that come with Rails. If you need a detailed description of the helper generator, for example, you can simply do:
 
 ```bash
 $ bin/rails generate helper --help
@@ -50,7 +52,7 @@ class InitializerGenerator < Rails::Generators::Base
 end
 ```
 
-NOTE: `create_file` is a method provided by `Thor::Actions`. Documentation for `create_file` and other Thor methods can be found in [Thor's documentation](http://rdoc.info/github/erikhuda/thor/master/Thor/Actions.html)
+NOTE: `create_file` is a method provided by `Thor::Actions`. Documentation for `create_file` and other Thor methods can be found in [Thor's documentation](https://rdoc.info/github/erikhuda/thor/master/Thor/Actions.html)
 
 Our new generator is quite simple: it inherits from `Rails::Generators::Base` and has one method definition. When a generator is invoked, each public method in the generator is executed sequentially in the order that it is defined. Finally, we invoke the `create_file` method that will create a file at the given destination with the given content. If you are familiar with the Rails Application Templates API, you'll feel right at home with the new generators API.
 
@@ -90,13 +92,15 @@ $ bin/rails generate generator initializer
       create  lib/generators/initializer/initializer_generator.rb
       create  lib/generators/initializer/USAGE
       create  lib/generators/initializer/templates
+      invoke  test_unit
+      create    test/lib/generators/initializer_generator_test.rb
 ```
 
 This is the generator just created:
 
 ```ruby
 class InitializerGenerator < Rails::Generators::NamedBase
-  source_root File.expand_path("../templates", __FILE__)
+  source_root File.expand_path('templates', __dir__)
 end
 ```
 
@@ -107,7 +111,7 @@ We can see that by invoking the description of this new generator (don't forget 
 ```bash
 $ bin/rails generate initializer --help
 Usage:
-  rails generate initializer NAME [options]
+  bin/rails generate initializer NAME [options]
 ```
 
 We can also see that our new generator has a class method called `source_root`. This method points to where our generator templates will be placed, if any, and by default it points to the created directory `lib/generators/initializer/templates`.
@@ -122,7 +126,7 @@ And now let's change the generator to copy this template when invoked:
 
 ```ruby
 class InitializerGenerator < Rails::Generators::NamedBase
-  source_root File.expand_path("../templates", __FILE__)
+  source_root File.expand_path('templates', __dir__)
 
   def copy_initializer_file
     copy_file "initializer.rb", "config/initializers/#{file_name}.rb"
@@ -143,9 +147,9 @@ The methods that are available for generators are covered in the [final section]
 Generators Lookup
 -----------------
 
-When you run `rails generate initializer core_extensions` Rails requires these files in turn until one is found:
+When you run `bin/rails generate initializer core_extensions` Rails requires these files in turn until one is found:
 
-```bash
+```
 rails/generators/initializer/initializer_generator.rb
 generators/initializer/initializer_generator.rb
 rails/generators/initializer_generator.rb
@@ -197,9 +201,10 @@ $ bin/rails generate scaffold User name:string
       invoke    jbuilder
       create      app/views/users/index.json.jbuilder
       create      app/views/users/show.json.jbuilder
+      invoke  test_unit
+      create    test/application_system_test_case.rb
+      create    test/system/users_test.rb
       invoke  assets
-      invoke    coffee
-      create      app/assets/javascripts/users.coffee
       invoke    scss
       create      app/assets/stylesheets/users.scss
       invoke  scss
@@ -208,7 +213,15 @@ $ bin/rails generate scaffold User name:string
 
 Looking at this output, it's easy to understand how generators work in Rails 3.0 and above. The scaffold generator doesn't actually generate anything, it just invokes others to do the work. This allows us to add/replace/remove any of those invocations. For instance, the scaffold generator invokes the scaffold_controller generator, which invokes erb, test_unit and helper generators. Since each generator has a single responsibility, they are easy to reuse, avoiding code duplication.
 
-Our first customization on the workflow will be to stop generating stylesheet, JavaScript and test fixture files for scaffolds. We can achieve that by changing our configuration to the following:
+If we want to avoid generating the default `app/assets/stylesheets/scaffolds.scss` file when scaffolding a new resource we can disable `scaffold_stylesheet`:
+
+```ruby
+  config.generators do |g|
+    g.scaffold_stylesheet false
+  end
+```
+
+The next customization on the workflow will be to stop generating stylesheet and test fixture files for scaffolds altogether. We can achieve that by changing our configuration to the following:
 
 ```ruby
 config.generators do |g|
@@ -216,11 +229,10 @@ config.generators do |g|
   g.template_engine :erb
   g.test_framework  :test_unit, fixture: false
   g.stylesheets     false
-  g.javascripts     false
 end
 ```
 
-If we generate another resource with the scaffold generator, we can see that stylesheet, JavaScript and fixture files are not created anymore. If you want to customize it further, for example to use DataMapper and RSpec instead of Active Record and TestUnit, it's just a matter of adding their gems to your application and configuring your generators.
+If we generate another resource with the scaffold generator, we can see that stylesheet, JavaScript, and fixture files are not created anymore. If you want to customize it further, for example to use DataMapper and RSpec instead of Active Record and TestUnit, it's just a matter of adding their gems to your application and configuring your generators.
 
 To demonstrate this, we are going to create a new helper generator that simply adds some instance variable readers. First, we create a generator within the rails namespace, as this is where rails searches for generators used as hooks:
 
@@ -230,6 +242,8 @@ $ bin/rails generate generator rails/my_helper
       create  lib/generators/rails/my_helper/my_helper_generator.rb
       create  lib/generators/rails/my_helper/USAGE
       create  lib/generators/rails/my_helper/templates
+      invoke  test_unit
+      create    test/lib/generators/rails/my_helper_generator_test.rb
 ```
 
 After that, we can delete both the `templates` directory and the `source_root`
@@ -272,7 +286,6 @@ config.generators do |g|
   g.template_engine :erb
   g.test_framework  :test_unit, fixture: false
   g.stylesheets     false
-  g.javascripts     false
   g.helper          :my_helper
 end
 ```
@@ -337,7 +350,6 @@ config.generators do |g|
   g.template_engine :erb
   g.test_framework  :test_unit, fixture: false
   g.stylesheets     false
-  g.javascripts     false
 end
 ```
 
@@ -372,7 +384,6 @@ config.generators do |g|
   g.template_engine :erb
   g.test_framework  :shoulda, fixture: false
   g.stylesheets     false
-  g.javascripts     false
 
   # Add a fallback!
   g.fallbacks[:shoulda] = :test_unit
@@ -407,10 +418,12 @@ $ bin/rails generate scaffold Comment body:text
       invoke    jbuilder
       create      app/views/comments/index.json.jbuilder
       create      app/views/comments/show.json.jbuilder
+      invoke  test_unit
+      create    test/application_system_test_case.rb
+      create    test/system/comments_test.rb
       invoke  assets
-      invoke    coffee
-      create      app/assets/javascripts/comments.coffee
       invoke    scss
+      create    app/assets/stylesheets/scaffolds.scss
 ```
 
 Fallbacks allow your generators to have a single responsibility, increasing code reuse and reducing the amount of duplication.
@@ -418,7 +431,7 @@ Fallbacks allow your generators to have a single responsibility, increasing code
 Application Templates
 ---------------------
 
-Now that you've seen how generators can be used _inside_ an application, did you know they can also be used to _generate_ applications too? This kind of generator is referred as a "template". This is a brief overview of the Templates API. For detailed documentation see the [Rails Application Templates guide](rails_application_templates.html).
+Now that you've seen how generators can be used _inside_ an application, did you know they can also be used to _generate_ applications too? This kind of generator is referred to as a "template". This is a brief overview of the Templates API. For detailed documentation see the [Rails Application Templates guide](rails_application_templates.html).
 
 ```ruby
 gem "rspec-rails", group: "test"
@@ -451,12 +464,32 @@ $ rails new thud -m https://gist.github.com/radar/722911/raw/
 
 Whilst the final section of this guide doesn't cover how to generate the most awesome template known to man, it will take you through the methods available at your disposal so that you can develop it yourself. These same methods are also available for generators.
 
+Adding Command Line Arguments
+-----------------------------
+Rails generators can be easily modified to accept custom command line arguments. This functionality comes from [Thor](https://www.rubydoc.info/github/erikhuda/thor/master/Thor/Base/ClassMethods#class_option-instance_method):
+
+```ruby
+class_option :scope, type: :string, default: 'read_products'
+```
+
+Now our generator can be invoked as follows:
+
+```bash
+$ bin/rails generate initializer --scope write_products
+```
+
+The command line arguments are accessed through the `options` method inside the generator class. e.g:
+
+```ruby
+@scope = options['scope']
+```
+
 Generator methods
 -----------------
 
 The following are methods available for both generators and templates for Rails.
 
-NOTE: Methods provided by Thor are not covered this guide and can be found in [Thor's documentation](http://rdoc.info/github/erikhuda/thor/master/Thor/Actions.html)
+NOTE: Methods provided by Thor are not covered this guide and can be found in [Thor's documentation](https://rdoc.info/github/erikhuda/thor/master/Thor/Actions.html)
 
 ### `gem`
 
@@ -476,13 +509,13 @@ Available options are:
 Any additional options passed to this method are put on the end of the line:
 
 ```ruby
-gem "devise", git: "git://github.com/plataformatec/devise", branch: "master"
+gem "devise", git: "https://github.com/plataformatec/devise.git", branch: "master"
 ```
 
 The above code will put the following line into `Gemfile`:
 
 ```ruby
-gem "devise", git: "git://github.com/plataformatec/devise", branch: "master"
+gem "devise", git: "https://github.com/plataformatec/devise.git", branch: "master"
 ```
 
 ### `gem_group`
@@ -599,7 +632,7 @@ This method also takes a block:
 
 ```ruby
 lib "super_special.rb" do
-  puts "Super special!"
+  "puts 'Super special!'"
 end
 ```
 
@@ -608,7 +641,7 @@ end
 Creates a Rake file in the `lib/tasks` directory of the application.
 
 ```ruby
-rakefile "test.rake", "hello there"
+rakefile "test.rake", 'task(:hello) { puts "Hello, there" }'
 ```
 
 This method also takes a block:
@@ -660,14 +693,6 @@ Available options are:
 
 * `:env` - Specifies the environment in which to run this rake task.
 * `:sudo` - Whether or not to run this task using `sudo`. Defaults to `false`.
-
-### `capify!`
-
-Runs the `capify` command from Capistrano at the root of the application which generates Capistrano configuration.
-
-```ruby
-capify!
-```
 
 ### `route`
 

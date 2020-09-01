@@ -1,5 +1,7 @@
-require 'delegate'
-require 'active_support/core_ext/string/strip'
+# frozen_string_literal: true
+
+require "delegate"
+require "io/console/size"
 
 module ActionDispatch
   module Routing
@@ -13,11 +15,7 @@ module ActionDispatch
       end
 
       def rack_app
-        app.app
-      end
-
-      def verb
-        super.source.gsub(/[$^]/, '')
+        app.rack_app
       end
 
       def path
@@ -37,25 +35,25 @@ module ActionDispatch
       end
 
       def controller
-        requirements[:controller] || ':controller'
+        parts.include?(:controller) ? ":controller" : requirements[:controller]
       end
 
       def action
-        requirements[:action] || ':action'
+        parts.include?(:action) ? ":action" : requirements[:action]
       end
 
       def internal?
-        controller.to_s =~ %r{\Arails/(info|mailers|welcome)}
+        internal
       end
 
       def engine?
-        rack_app.respond_to?(:routes)
+        app.engine?
       end
     end
 
     ##
     # This class is just used for displaying route information when someone
-    # executes `rake routes` or looks at the RoutingError page.
+    # executes `bin/rails routes` or looks at the RoutingError page.
     # People should not use this class.
     class RoutesInspector # :nodoc:
       def initialize(routes)
@@ -63,13 +61,11 @@ module ActionDispatch
         @routes = routes
       end
 
-      def format(formatter, filter = nil)
-        routes_to_display = filter_routes(filter)
-
+      def format(formatter, filter = {})
+        routes_to_display = filter_routes(normalize_filter(filter))
         routes = collect_routes(routes_to_display)
-
         if routes.none?
-          formatter.no_routes
+          formatter.no_routes(collect_routes(@routes), filter)
           return formatter.result
         end
 
@@ -85,92 +81,155 @@ module ActionDispatch
       end
 
       private
-
-      def filter_routes(filter)
-        if filter
-          @routes.select { |route| route.defaults[:controller] == filter }
-        else
-          @routes
-        end
-      end
-
-      def collect_routes(routes)
-        routes.collect do |route|
-          RouteWrapper.new(route)
-        end.reject(&:internal?).collect do |route|
-          collect_engine_routes(route)
-
-          { name: route.name,
-            verb: route.verb,
-            path: route.path,
-            reqs: route.reqs }
-        end
-      end
-
-      def collect_engine_routes(route)
-        name = route.endpoint
-        return unless route.engine?
-        return if @engines[name]
-
-        routes = route.rack_app.routes
-        if routes.is_a?(ActionDispatch::Routing::RouteSet)
-          @engines[name] = collect_routes(routes.routes)
-        end
-      end
-    end
-
-    class ConsoleFormatter
-      def initialize
-        @buffer = []
-      end
-
-      def result
-        @buffer.join("\n")
-      end
-
-      def section_title(title)
-        @buffer << "\n#{title}:"
-      end
-
-      def section(routes)
-        @buffer << draw_section(routes)
-      end
-
-      def header(routes)
-        @buffer << draw_header(routes)
-      end
-
-      def no_routes
-        @buffer << <<-MESSAGE.strip_heredoc
-          You don't have any routes defined!
-
-          Please add some routes in config/routes.rb.
-
-          For more information about routes, see the Rails guide: http://guides.rubyonrails.org/routing.html.
-          MESSAGE
-      end
-
-      private
-        def draw_section(routes)
-          header_lengths = ['Prefix', 'Verb', 'URI Pattern'].map(&:length)
-          name_width, verb_width, path_width = widths(routes).zip(header_lengths).map(&:max)
-
-          routes.map do |r|
-            "#{r[:name].rjust(name_width)} #{r[:verb].ljust(verb_width)} #{r[:path].ljust(path_width)} #{r[:reqs]}"
+        def normalize_filter(filter)
+          if filter[:controller]
+            { controller: /#{filter[:controller].underscore.sub(/_?controller\z/, "")}/ }
+          elsif filter[:grep]
+            { controller: /#{filter[:grep]}/, action: /#{filter[:grep]}/,
+              verb: /#{filter[:grep]}/, name: /#{filter[:grep]}/, path: /#{filter[:grep]}/ }
           end
         end
 
-        def draw_header(routes)
-          name_width, verb_width, path_width = widths(routes)
-
-          "#{"Prefix".rjust(name_width)} #{"Verb".ljust(verb_width)} #{"URI Pattern".ljust(path_width)} Controller#Action"
+        def filter_routes(filter)
+          if filter
+            @routes.select do |route|
+              route_wrapper = RouteWrapper.new(route)
+              filter.any? { |default, value| value.match?(route_wrapper.send(default)) }
+            end
+          else
+            @routes
+          end
         end
 
-        def widths(routes)
-          [routes.map { |r| r[:name].length }.max || 0,
-           routes.map { |r| r[:verb].length }.max || 0,
-           routes.map { |r| r[:path].length }.max || 0]
+        def collect_routes(routes)
+          routes.collect do |route|
+            RouteWrapper.new(route)
+          end.reject(&:internal?).collect do |route|
+            collect_engine_routes(route)
+
+            { name: route.name,
+              verb: route.verb,
+              path: route.path,
+              reqs: route.reqs }
+          end
         end
+
+        def collect_engine_routes(route)
+          name = route.endpoint
+          return unless route.engine?
+          return if @engines[name]
+
+          routes = route.rack_app.routes
+          if routes.is_a?(ActionDispatch::Routing::RouteSet)
+            @engines[name] = collect_routes(routes.routes)
+          end
+        end
+    end
+
+    module ConsoleFormatter
+      class Base
+        def initialize
+          @buffer = []
+        end
+
+        def result
+          @buffer.join("\n")
+        end
+
+        def section_title(title)
+        end
+
+        def section(routes)
+        end
+
+        def header(routes)
+        end
+
+        def no_routes(routes, filter)
+          @buffer <<
+            if routes.none?
+              <<~MESSAGE
+                You don't have any routes defined!
+
+                Please add some routes in config/routes.rb.
+              MESSAGE
+            elsif filter.key?(:controller)
+              "No routes were found for this controller."
+            elsif filter.key?(:grep)
+              "No routes were found for this grep pattern."
+            end
+
+          @buffer << "For more information about routes, see the Rails guide: https://guides.rubyonrails.org/routing.html."
+        end
+      end
+
+      class Sheet < Base
+        def section_title(title)
+          @buffer << "\n#{title}:"
+        end
+
+        def section(routes)
+          @buffer << draw_section(routes)
+        end
+
+        def header(routes)
+          @buffer << draw_header(routes)
+        end
+
+        private
+          def draw_section(routes)
+            header_lengths = ["Prefix", "Verb", "URI Pattern"].map(&:length)
+            name_width, verb_width, path_width = widths(routes).zip(header_lengths).map(&:max)
+
+            routes.map do |r|
+              "#{r[:name].rjust(name_width)} #{r[:verb].ljust(verb_width)} #{r[:path].ljust(path_width)} #{r[:reqs]}"
+            end
+          end
+
+          def draw_header(routes)
+            name_width, verb_width, path_width = widths(routes)
+
+            "#{"Prefix".rjust(name_width)} #{"Verb".ljust(verb_width)} #{"URI Pattern".ljust(path_width)} Controller#Action"
+          end
+
+          def widths(routes)
+            [routes.map { |r| r[:name].length }.max || 0,
+             routes.map { |r| r[:verb].length }.max || 0,
+             routes.map { |r| r[:path].length }.max || 0]
+          end
+      end
+
+      class Expanded < Base
+        def initialize(width: IO.console_size[1])
+          @width = width
+          super()
+        end
+
+        def section_title(title)
+          @buffer << "\n#{"[ #{title} ]"}"
+        end
+
+        def section(routes)
+          @buffer << draw_expanded_section(routes)
+        end
+
+        private
+          def draw_expanded_section(routes)
+            routes.map.each_with_index do |r, i|
+              <<~MESSAGE.chomp
+                #{route_header(index: i + 1)}
+                Prefix            | #{r[:name]}
+                Verb              | #{r[:verb]}
+                URI               | #{r[:path]}
+                Controller#Action | #{r[:reqs]}
+              MESSAGE
+            end
+          end
+
+          def route_header(index:)
+            "--[ Route #{index} ]".ljust(@width, "-")
+          end
+      end
     end
 
     class HtmlTableFormatter
@@ -187,21 +246,21 @@ module ActionDispatch
         @buffer << @view.render(partial: "routes/route", collection: routes)
       end
 
-      # the header is part of the HTML page, so we don't construct it here.
+      # The header is part of the HTML page, so we don't construct it here.
       def header(routes)
       end
 
-      def no_routes
-        @buffer << <<-MESSAGE.strip_heredoc
+      def no_routes(*)
+        @buffer << <<~MESSAGE
           <p>You don't have any routes defined!</p>
           <ul>
             <li>Please add some routes in <tt>config/routes.rb</tt>.</li>
             <li>
               For more information about routes, please see the Rails guide
-              <a href="http://guides.rubyonrails.org/routing.html">Rails Routing from the Outside In</a>.
+              <a href="https://guides.rubyonrails.org/routing.html">Rails Routing from the Outside In</a>.
             </li>
           </ul>
-          MESSAGE
+        MESSAGE
       end
 
       def result

@@ -1,5 +1,6 @@
-require 'active_support/concern'
-require 'support/integration/jobs_manager'
+# frozen_string_literal: true
+
+require "support/integration/jobs_manager"
 
 module TestCaseHelpers
   extend ActiveSupport::Concern
@@ -17,8 +18,7 @@ module TestCaseHelpers
     end
   end
 
-  protected
-
+  private
     def jobs_manager
       JobsManager.current_manager
     end
@@ -28,29 +28,39 @@ module TestCaseHelpers
     end
 
     def adapter_is?(*adapter_class_symbols)
-      adapter_class_symbols.map(&:to_s).include?(ActiveJob::Base.queue_adapter.class.name.split("::").last.gsub(/Adapter$/, '').underscore)
+      adapter_class_symbols.map(&:to_s).include? ActiveJob::Base.queue_adapter_name
     end
 
-    def wait_for_jobs_to_finish_for(seconds=60)
-      begin
-        Timeout.timeout(seconds) do
-          while !job_executed do
-            sleep 0.25
-          end
+    def wait_for_jobs_to_finish_for(seconds = 60)
+      Timeout.timeout(seconds) do
+        while !job_executed do
+          sleep 0.25
         end
-      rescue Timeout::Error
       end
+    rescue Timeout::Error
     end
 
-    def job_executed(id=@id)
-      Dummy::Application.root.join("tmp/#{id}").exist?
+    def job_file(id)
+      Dummy::Application.root.join("tmp/#{id}")
     end
 
-    def job_executed_at(id=@id)
-      File.new(Dummy::Application.root.join("tmp/#{id}")).ctime
+    def job_executed(id = @id)
+      job_file(id).exist?
     end
 
-    def job_output
-      File.read Dummy::Application.root.join("tmp/#{@id}")
+    def job_data(id)
+      Marshal.load(File.binread(job_file(id)))
+    end
+
+    def job_executed_at(id = @id)
+      job_data(id)["executed_at"]
+    end
+
+    def job_executed_in_locale(id = @id)
+      job_data(id)["locale"]
+    end
+
+    def job_executed_in_timezone(id = @id)
+      job_data(id)["timezone"]
     end
 end

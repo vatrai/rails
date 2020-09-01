@@ -1,4 +1,6 @@
-require 'active_job/railtie'
+# frozen_string_literal: true
+
+require "active_job/railtie"
 require "action_mailer"
 require "rails"
 require "abstract_controller/railties/routes_helpers"
@@ -20,9 +22,10 @@ module ActionMailer
       options.javascripts_dir ||= paths["public/javascripts"].first
       options.stylesheets_dir ||= paths["public/stylesheets"].first
       options.show_previews = Rails.env.development? if options.show_previews.nil?
+      options.cache_store ||= Rails.cache
 
       if options.show_previews
-        options.preview_path  ||= defined?(Rails.root) ? "#{Rails.root}/test/mailers/previews" : nil
+        options.preview_path ||= defined?(Rails.root) ? "#{Rails.root}/test/mailers/previews" : nil
       end
 
       # make sure readers methods get compiled
@@ -38,14 +41,24 @@ module ActionMailer
         register_preview_interceptors(options.delete(:preview_interceptors))
         register_observers(options.delete(:observers))
 
-        options.each { |k,v| send("#{k}=", v) }
-
-        if options.show_previews
-          app.routes.prepend do
-            get '/rails/mailers'         => "rails/mailers#index"
-            get '/rails/mailers/*path'   => "rails/mailers#preview"
-          end
+        if delivery_job = options.delete(:delivery_job)
+          self.delivery_job = delivery_job.constantize
         end
+
+        options.each { |k, v| send("#{k}=", v) }
+      end
+
+      ActiveSupport.on_load(:action_dispatch_integration_test) do
+        include ActionMailer::TestHelper
+        include ActionMailer::TestCase::ClearTestDeliveries
+      end
+    end
+
+    initializer "action_mailer.set_autoload_paths" do |app|
+      options = app.config.action_mailer
+
+      if options.show_previews && options.preview_path
+        ActiveSupport::Dependencies.autoload_paths << options.preview_path
       end
     end
 
@@ -55,9 +68,20 @@ module ActionMailer
       end
     end
 
-    config.after_initialize do
-      if ActionMailer::Base.preview_path
-        ActiveSupport::Dependencies.autoload_paths << ActionMailer::Base.preview_path
+    initializer "action_mailer.eager_load_actions" do
+      ActiveSupport.on_load(:after_initialize) do
+        ActionMailer::Base.descendants.each(&:action_methods) if config.eager_load
+      end
+    end
+
+    config.after_initialize do |app|
+      options = app.config.action_mailer
+
+      if options.show_previews
+        app.routes.prepend do
+          get "/rails/mailers"       => "rails/mailers#index", internal: true
+          get "/rails/mailers/*path" => "rails/mailers#preview", internal: true
+        end
       end
     end
   end

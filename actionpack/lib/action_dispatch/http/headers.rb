@@ -1,10 +1,26 @@
+# frozen_string_literal: true
+
 module ActionDispatch
   module Http
     # Provides access to the request's HTTP headers from the environment.
     #
-    #   env     = { "CONTENT_TYPE" => "text/plain" }
-    #   headers = ActionDispatch::Http::Headers.new(env)
+    #   env     = { "CONTENT_TYPE" => "text/plain", "HTTP_USER_AGENT" => "curl/7.43.0" }
+    #   headers = ActionDispatch::Http::Headers.from_hash(env)
     #   headers["Content-Type"] # => "text/plain"
+    #   headers["User-Agent"] # => "curl/7.43.0"
+    #
+    # Also note that when headers are mapped to CGI-like variables by the Rack
+    # server, both dashes and underscores are converted to underscores. This
+    # ambiguity cannot be resolved at this stage anymore. Both underscores and
+    # dashes have to be interpreted as if they were originally sent as dashes.
+    #
+    #   # GET / HTTP/1.1
+    #   # ...
+    #   # User-Agent: curl/7.43.0
+    #   # X_Custom_Header: token
+    #
+    #   headers["X_Custom_Header"] # => nil
+    #   headers["X-Custom-Header"] # => "token"
     class Headers
       CGI_VARIABLES = Set.new(%W[
         AUTH_TYPE
@@ -49,6 +65,11 @@ module ActionDispatch
         @req.set_header env_name(key), value
       end
 
+      # Add a value to a multivalued header like Vary or Accept-Encoding.
+      def add(key, value)
+        @req.add_header env_name(key), value
+      end
+
       def key?(key)
         @req.has_header? env_name(key)
       end
@@ -67,7 +88,7 @@ module ActionDispatch
         @req.fetch_header(env_name(key)) do
           return default unless default == DEFAULT
           return yield if block_given?
-          raise NameError, key
+          raise KeyError, key
         end
       end
 
@@ -95,17 +116,17 @@ module ActionDispatch
       def env; @req.env.dup; end
 
       private
-
-      # Converts a HTTP header name to an environment variable name if it is
-      # not contained within the headers hash.
-      def env_name(key)
-        key = key.to_s
-        if key =~ HTTP_HEADER
-          key = key.upcase.tr('-', '_')
-          key = "HTTP_" + key unless CGI_VARIABLES.include?(key)
+        # Converts an HTTP header name to an environment variable name if it is
+        # not contained within the headers hash.
+        def env_name(key)
+          key = key.to_s
+          if HTTP_HEADER.match?(key)
+            key = key.upcase
+            key.tr!("-", "_")
+            key.prepend("HTTP_") unless CGI_VARIABLES.include?(key)
+          end
+          key
         end
-        key
-      end
     end
   end
 end

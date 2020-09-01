@@ -1,129 +1,63 @@
-*   Validate multiple contexts on `valid?` and `invalid?` at once.
+*   Deprecate marshalling load from legacy attributes format.
 
-    Example:
+    *Ryuta Kamizono*
 
-        class Person
-          include ActiveModel::Validations
+*   `*_previously_changed?` accepts `:from` and `:to` keyword arguments like `*_changed?`.
 
-          attr_reader :name, :title
-          validates_presence_of :name, on: :create
-          validates_presence_of :title, on: :update
+        topic.update!(status: :archived)
+        topic.status_previously_changed?(from: "active", to: "archived")
+        # => true
+
+    *George Claghorn*
+
+*   Raise FrozenError when trying to write attributes that aren't backed by the database on an object that is frozen:
+
+        class Animal
+          include ActiveModel::Attributes
+          attribute :age
         end
 
-        person = Person.new
-        person.valid?([:create, :update])    # => false
-        person.errors.messages               # => {:name=>["can't be blank"], :title=>["can't be blank"]}
+        animal = Animal.new
+        animal.freeze
+        animal.age = 25 # => FrozenError, "can't modify a frozen Animal"
 
-    *Dmitry Polushkin*
+    *Josh Brody*
 
-*   Add case_sensitive option for confirmation validator in models.
+*   Add `*_previously_was` attribute methods when dirty tracking. Example:
 
-    *Akshat Sharma*
+        pirate.update(catchphrase: "Ahoy!")
+        pirate.previous_changes["catchphrase"] # => ["Thar She Blows!", "Ahoy!"]
+        pirate.catchphrase_previously_was # => "Thar She Blows!"
 
-*   Ensure `method_missing` is called for methods passed to
-    `ActiveModel::Serialization#serializable_hash` that don't exist.
+    *DHH*
 
-    *Jay Elaraj*
+*   Encapsulate each validation error as an Error object.
 
-*   Remove `ActiveModel::Serializers::Xml` from core.
+    The `ActiveModel`’s `errors` collection is now an array of these Error
+    objects, instead of messages/details hash.
 
-    *Zachary Scott*
+    For each of these `Error` object, its `message` and `full_message` methods
+    are for generating error messages. Its `details` method would return error’s
+    extra parameters, found in the original `details` hash.
 
-*   Add `ActiveModel::Dirty#[attr_name]_previously_changed?` and
-    `ActiveModel::Dirty#[attr_name]_previous_change` to improve access
-    to recorded changes after the model has been saved.
+    The change tries its best at maintaining backward compatibility, however
+    some edge cases won’t be covered, like `errors#first` will return `ActiveModel::Error` and manipulating
+    `errors.messages` and `errors.details` hashes directly will have no effect. Moving forward,
+    please convert those direct manipulations to use provided API methods instead.
 
-    It makes the dirty-attributes query methods consistent before and after
-    saving.
+    The list of deprecated methods and their planned future behavioral changes at the next major release are:
 
-    *Fernando Tapia Rico*
+    * `errors#slice!` will be removed.
+    * `errors#each` with the `key, value` two-arguments block will stop working, while the `error` single-argument block would return `Error` object.
+    * `errors#values` will be removed.
+    * `errors#keys` will be removed.
+    * `errors#to_xml` will be removed.
+    * `errors#to_h` will be removed, and can be replaced with `errors#to_hash`.
+    * Manipulating `errors` itself as a hash will have no effect (e.g. `errors[:foo] = 'bar'`).
+    * Manipulating the hash returned by `errors#messages` (e.g. `errors.messages[:foo] = 'bar'`) will have no effect.
+    * Manipulating the hash returned by `errors#details` (e.g. `errors.details[:foo].clear`) will have no effect.
 
-*   Deprecate the `:tokenizer` option for `validates_length_of`, in favor of
-    plain Ruby.
-
-    *Sean Griffin*
-
-*   Deprecate `ActiveModel::Errors#add_on_empty` and `ActiveModel::Errors#add_on_blank`
-    with no replacement.
-
-    *Wojciech Wnętrzak*
-
-*   Deprecate `ActiveModel::Errors#get`, `ActiveModel::Errors#set` and
-    `ActiveModel::Errors#[]=` methods that have inconsistent behavior.
-
-    *Wojciech Wnętrzak*
-
-*   Allow symbol as values for `tokenize` of `LengthValidator`.
-
-    *Kensuke Naito*
-
-*   Assigning an unknown attribute key to an `ActiveModel` instance during initialization
-    will now raise `ActiveModel::AttributeAssignment::UnknownAttributeError` instead of
-    `NoMethodError`.
-
-    Example:
-
-        User.new(foo: 'some value')
-        # => ActiveModel::AttributeAssignment::UnknownAttributeError: unknown attribute 'foo' for User.
-
-    *Eugene Gilburg*
-
-*   Extracted `ActiveRecord::AttributeAssignment` to `ActiveModel::AttributeAssignment`
-    allowing to use it for any object as an includable module.
-
-    Example:
-
-        class Cat
-          include ActiveModel::AttributeAssignment
-          attr_accessor :name, :status
-        end
-
-        cat = Cat.new
-        cat.assign_attributes(name: "Gorby", status: "yawning")
-        cat.name   # => 'Gorby'
-        cat.status # => 'yawning'
-        cat.assign_attributes(status: "sleeping")
-        cat.name   # => 'Gorby'
-        cat.status # => 'sleeping'
-
-    *Bogdan Gusiev*
-
-*   Add `ActiveModel::Errors#details`
-
-    To be able to return type of used validator, one can now call `details`
-    on errors instance.
-
-    Example:
-
-        class User < ActiveRecord::Base
-          validates :name, presence: true
-        end
-
-        user = User.new; user.valid?; user.errors.details
-        => {name: [{error: :blank}]}
-
-    *Wojciech Wnętrzak*
-
-*   Change validates_acceptance_of to accept true by default.
-
-    The default for validates_acceptance_of is now "1" and true.
-    In the past, only "1" was the default and you were required to add
-    accept: true.
-
-*   Remove deprecated `ActiveModel::Dirty#reset_#{attribute}` and
-    `ActiveModel::Dirty#reset_changes`.
-
-    *Rafael Mendonça França*
-
-*   Change the way in which callback chains can be halted.
-
-    The preferred method to halt a callback chain from now on is to explicitly
-    `throw(:abort)`.
-    In the past, returning `false` in an ActiveModel or ActiveModel::Validations
-    `before_` callback had the side effect of halting the callback chain.
-    This is not recommended anymore and, depending on the value of the
-    `config.active_support.halt_callback_chains_on_return_false` option, will
-    either not work at all or display a deprecation warning.
+    *lulalala*
 
 
-Please check [4-2-stable](https://github.com/rails/rails/blob/4-2-stable/activemodel/CHANGELOG.md) for previous changes.
+Please check [6-0-stable](https://github.com/rails/rails/blob/6-0-stable/activemodel/CHANGELOG.md) for previous changes.

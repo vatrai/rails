@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module ActiveSupport
   # Backtraces often include many lines that are not relevant for the context
   # under review. This makes it hard to find the signal amongst the backtrace
@@ -12,9 +14,9 @@ module ActiveSupport
   # is to exclude the output of a noisy library from the backtrace, so that you
   # can focus on the rest.
   #
-  #   bc = BacktraceCleaner.new
+  #   bc = ActiveSupport::BacktraceCleaner.new
   #   bc.add_filter   { |line| line.gsub(Rails.root.to_s, '') } # strip the Rails.root prefix
-  #   bc.add_silencer { |line| line =~ /mongrel|rubygems/ } # skip any lines from mongrel or rubygems
+  #   bc.add_silencer { |line| /puma|rubygems/.match?(line) } # skip any lines from puma or rubygems
   #   bc.clean(exception.backtrace) # perform the cleanup
   #
   # To reconfigure an existing BacktraceCleaner (like the default one in Rails)
@@ -29,6 +31,9 @@ module ActiveSupport
   class BacktraceCleaner
     def initialize
       @filters, @silencers = [], []
+      add_gem_filter
+      add_gem_silencer
+      add_stdlib_silencer
     end
 
     # Returns the backtrace after all filters and silencers have been run
@@ -59,8 +64,8 @@ module ActiveSupport
     # Adds a silencer from the block provided. If the silencer returns +true+
     # for a given line, it will be excluded from the clean backtrace.
     #
-    #   # Will reject all lines that include the word "mongrel", like "/gems/mongrel/server.rb" or "/app/my_mongrel_server/rb"
-    #   backtrace_cleaner.add_silencer { |line| line =~ /mongrel/ }
+    #   # Will reject all lines that include the word "puma", like "/gems/puma/server.rb" or "/app/my_puma_server/rb"
+    #   backtrace_cleaner.add_silencer { |line| /puma/.match?(line) }
     def add_silencer(&block)
       @silencers << block
     end
@@ -80,24 +85,48 @@ module ActiveSupport
     end
 
     private
+      FORMATTED_GEMS_PATTERN = /\A[^\/]+ \([\w.]+\) /
+
+      def add_gem_filter
+        gems_paths = (Gem.path | [Gem.default_dir]).map { |p| Regexp.escape(p) }
+        return if gems_paths.empty?
+
+        gems_regexp = %r{(#{gems_paths.join('|')})/(bundler/)?gems/([^/]+)-([\w.]+)/(.*)}
+        gems_result = '\3 (\4) \5'
+        add_filter { |line| line.sub(gems_regexp, gems_result) }
+      end
+
+      def add_gem_silencer
+        add_silencer { |line| FORMATTED_GEMS_PATTERN.match?(line) }
+      end
+
+      def add_stdlib_silencer
+        add_silencer { |line| line.start_with?(RbConfig::CONFIG["rubylibdir"]) }
+      end
+
+      # Process +ary+ via +filters+ using +method+, ensuring
+      # _something_ gets returned.
+      def process_collection(ary, filters, method)
+        filters.reduce(ary) { |bt, f| bt.send(method) { |line| f.call(line) } }
+      end
+
+      # Use @filters to transform the backtrace via map
       def filter_backtrace(backtrace)
-        @filters.each do |f|
-          backtrace = backtrace.map { |line| f.call(line) }
-        end
-
-        backtrace
+        process_collection backtrace, @filters, :map
       end
 
+      # Use @silencers to reject parts of the backtrace. Guarantee
+      # something non-empty is returned.
       def silence(backtrace)
-        @silencers.each do |s|
-          backtrace = backtrace.reject { |line| s.call(line) }
-        end
-
-        backtrace
+        result = process_collection backtrace, @silencers, :reject
+        result.first ? result : backtrace.dup
       end
 
+      # Use @silencers to select parts of the backtrace. Guarantee
+      # something non-empty is returned.
       def noise(backtrace)
-        backtrace - silence(backtrace)
+        result = backtrace.select { |line| @silencers.any? { |s| s.call(line) } }
+        result.first ? result : backtrace.dup
       end
   end
 end

@@ -1,14 +1,14 @@
+# frozen_string_literal: true
+
 module ActiveRecord
-  # = Active Record Has Many Through Association
   module Associations
+    # = Active Record Has Many Through Association
     class HasManyThroughAssociation < HasManyAssociation #:nodoc:
       include ThroughAssociation
 
       def initialize(owner, reflection)
         super
-
-        @through_records     = {}
-        @through_association = nil
+        @through_records = {}.compare_by_identity
       end
 
       def concat(*records)
@@ -21,27 +21,11 @@ module ActiveRecord
         super
       end
 
-      def concat_records(records)
-        ensure_not_nested
-
-        records = super(records, true)
-
-        if owner.new_record? && records
-          records.flatten.each do |record|
-            build_through_record(record)
-          end
-        end
-
-        records
-      end
-
       def insert_record(record, validate = true, raise = false)
         ensure_not_nested
 
-        if raise
-          record.save!(:validate => validate)
-        else
-          return unless record.save(:validate => validate)
+        if record.new_record? || record.has_changes_to_save?
+          return unless super
         end
 
         save_through_record(record)
@@ -50,9 +34,18 @@ module ActiveRecord
       end
 
       private
+        def concat_records(records)
+          ensure_not_nested
 
-        def through_association
-          @through_association ||= owner.association(through_reflection.name)
+          records = super(records, true)
+
+          if owner.new_record? && records
+            records.flatten.each do |record|
+              build_through_record(record)
+            end
+          end
+
+          records
         end
 
         # The through record (built with build_record) is temporarily cached
@@ -61,17 +54,15 @@ module ActiveRecord
         # However, after insert_record has been called, the cache is cleared in
         # order to allow multiple instances of the same record in an association.
         def build_through_record(record)
-          @through_records[record.object_id] ||= begin
+          @through_records[record] ||= begin
             ensure_mutable
 
-            through_record = through_association.build(*options_for_through_record)
-            through_record.send("#{source_reflection.name}=", record)
-            through_record
-          end
-        end
+            attributes = through_scope_attributes
+            attributes[source_reflection.name] = record
+            attributes[source_reflection.foreign_type] = options[:source_type] if options[:source_type]
 
-        def options_for_through_record
-          [through_scope_attributes]
+            through_association.build(attributes)
+          end
         end
 
         def through_scope_attributes
@@ -81,15 +72,18 @@ module ActiveRecord
         end
 
         def save_through_record(record)
-          build_through_record(record).save!
+          association = build_through_record(record)
+          if association.changed?
+            association.save!
+          end
         ensure
-          @through_records.delete(record.object_id)
+          @through_records.delete(record)
         end
 
         def build_record(attributes)
           ensure_not_nested
 
-          record = super(attributes)
+          record = super
 
           inverse = source_reflection.inverse_of
           if inverse
@@ -101,6 +95,11 @@ module ActiveRecord
           end
 
           record
+        end
+
+        def remove_records(existing_records, records, method)
+          super
+          delete_through_records(records)
         end
 
         def target_reflection_has_associated_record?
@@ -127,21 +126,15 @@ module ActiveRecord
 
           scope = through_association.scope
           scope.where! construct_join_attributes(*records)
+          scope = scope.where(through_scope_attributes)
 
           case method
           when :destroy
             if scope.klass.primary_key
-              count = scope.destroy_all.length
+              count = scope.destroy_all.count(&:destroyed?)
             else
               scope.each(&:_run_destroy_callbacks)
-
-              arel = scope.arel
-
-              stmt = Arel::DeleteManager.new
-              stmt.from scope.klass.arel_table
-              stmt.wheres = arel.constraints
-
-              count = scope.klass.connection.delete(stmt, 'SQL', scope.bound_attributes)
+              count = scope.delete_all
             end
           when :nullify
             count = scope.update_all(source_reflection.foreign_key => nil)
@@ -160,6 +153,30 @@ module ActiveRecord
             update_counter(-count, through_reflection)
           else
             update_counter(-count)
+          end
+
+          count
+        end
+
+        def difference(a, b)
+          distribution = distribution(b)
+
+          a.reject { |record| mark_occurrence(distribution, record) }
+        end
+
+        def intersection(a, b)
+          distribution = distribution(b)
+
+          a.select { |record| mark_occurrence(distribution, record) }
+        end
+
+        def mark_occurrence(distribution, record)
+          distribution[record] > 0 && distribution[record] -= 1
+        end
+
+        def distribution(array)
+          array.each_with_object(Hash.new(0)) do |record, distribution|
+            distribution[record] += 1
           end
         end
 
@@ -185,13 +202,13 @@ module ActiveRecord
               end
             end
 
-            @through_records.delete(record.object_id)
+            @through_records.delete(record)
           end
         end
 
         def find_target
           return [] unless target_reflection_has_associated_record?
-          get_records
+          super
         end
 
         # NOTE - not sure that we can actually cope with inverses here

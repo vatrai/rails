@@ -1,9 +1,11 @@
-require 'date'
-require 'active_support/duration'
-require 'active_support/core_ext/object/acts_like'
-require 'active_support/core_ext/date/zones'
-require 'active_support/core_ext/time/zones'
-require 'active_support/core_ext/date_and_time/calculations'
+# frozen_string_literal: true
+
+require "date"
+require "active_support/duration"
+require "active_support/core_ext/object/acts_like"
+require "active_support/core_ext/date/zones"
+require "active_support/core_ext/time/zones"
+require "active_support/core_ext/date_and_time/calculations"
 
 class Date
   include DateAndTime::Calculations
@@ -26,7 +28,7 @@ class Date
       Thread.current[:beginning_of_week] = find_beginning_of_week!(week_start)
     end
 
-    # Returns week start day symbol (e.g. :monday), or raises an ArgumentError for invalid day symbol.
+    # Returns week start day symbol (e.g. :monday), or raises an +ArgumentError+ for invalid day symbol.
     def find_beginning_of_week!(week_start)
       raise ArgumentError, "Invalid beginning of week: #{week_start}" unless ::Date::DAYS_INTO_WEEK.key?(week_start)
       week_start
@@ -108,12 +110,13 @@ class Date
   # Provides precise Date calculations for years, months, and days. The +options+ parameter takes a hash with
   # any of these keys: <tt>:years</tt>, <tt>:months</tt>, <tt>:weeks</tt>, <tt>:days</tt>.
   def advance(options)
-    options = options.dup
     d = self
-    d = d >> options.delete(:years) * 12 if options[:years]
-    d = d >> options.delete(:months)     if options[:months]
-    d = d +  options.delete(:weeks) * 7  if options[:weeks]
-    d = d +  options.delete(:days)       if options[:days]
+
+    d = d >> options[:years] * 12 if options[:years]
+    d = d >> options[:months] if options[:months]
+    d = d + options[:weeks] * 7 if options[:weeks]
+    d = d + options[:days] if options[:days]
+
     d
   end
 
@@ -129,11 +132,11 @@ class Date
       options.fetch(:day, day)
     )
   end
-  
+
   # Allow Date to be compared with Time by converting to DateTime and relying on the <=> from there.
   def compare_with_coercion(other)
     if other.is_a?(Time)
-      self.to_datetime <=> other
+      to_datetime <=> other
     else
       compare_without_coercion(other)
     end

@@ -1,4 +1,6 @@
-require 'que'
+# frozen_string_literal: true
+
+require "que"
 
 Que::Job.class_eval do
   class << self; alias_method :original_enqueue, :enqueue; end
@@ -7,8 +9,9 @@ Que::Job.class_eval do
       options = args.pop
       options.delete(:run_at)
       options.delete(:priority)
+      options.delete(:queue)
       args << options unless options.empty?
     end
-    self.run(*args)
+    run(*args)
   end
 end

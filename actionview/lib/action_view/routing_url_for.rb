@@ -1,8 +1,9 @@
-require 'action_dispatch/routing/polymorphic_routes'
+# frozen_string_literal: true
+
+require "action_dispatch/routing/polymorphic_routes"
 
 module ActionView
   module RoutingUrlFor
-
     # Returns the URL for the set of +options+ provided. This takes the
     # same options as +url_for+ in Action Controller (see the
     # documentation for <tt>ActionController::Base#url_for</tt>). Note that by default
@@ -32,7 +33,7 @@ module ActionView
     #
     # ==== Examples
     #   <%= url_for(action: 'index') %>
-    #   # => /blog/
+    #   # => /blogs/
     #
     #   <%= url_for(action: 'find', controller: 'books') %>
     #   # => /books/find
@@ -83,33 +84,24 @@ module ActionView
         super(only_path: _generate_paths_by_default)
       when Hash
         options = options.symbolize_keys
-        unless options.key?(:only_path)
-          if options[:host].nil?
-            options[:only_path] = _generate_paths_by_default
-          else
-            options[:only_path] = false
-          end
-        end
+        ensure_only_path_option(options)
 
         super(options)
       when ActionController::Parameters
-        unless options.key?(:only_path)
-          if options[:host].nil?
-            options[:only_path] = _generate_paths_by_default
-          else
-            options[:only_path] = false
-          end
-        end
+        ensure_only_path_option(options)
 
         super(options)
       when :back
         _back_url
       when Array
         components = options.dup
-        if _generate_paths_by_default
-          polymorphic_path(components, components.extract_options!)
+        options = components.extract_options!
+        ensure_only_path_option(options)
+
+        if options[:only_path]
+          polymorphic_path(components, options)
         else
-          polymorphic_url(components, components.extract_options!)
+          polymorphic_url(components, options)
         end
       else
         method = _generate_paths_by_default ? :path : :url
@@ -131,21 +123,24 @@ module ActionView
       controller.url_options
     end
 
-    def _routes_context #:nodoc:
-      controller
-    end
-    protected :_routes_context
-
-    def optimize_routes_generation? #:nodoc:
-      controller.respond_to?(:optimize_routes_generation?, true) ?
-        controller.optimize_routes_generation? : super
-    end
-    protected :optimize_routes_generation?
-
     private
+      def _routes_context
+        controller
+      end
+
+      def optimize_routes_generation?
+        controller.respond_to?(:optimize_routes_generation?, true) ?
+          controller.optimize_routes_generation? : super
+      end
 
       def _generate_paths_by_default
         true
+      end
+
+      def ensure_only_path_option(options)
+        unless options.key?(:only_path)
+          options[:only_path] = _generate_paths_by_default unless options[:host]
+        end
       end
   end
 end

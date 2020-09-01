@@ -1,4 +1,7 @@
-require 'active_support/string_inquirer'
+# frozen_string_literal: true
+
+require "active_support/string_inquirer"
+require "active_support/environment_inquirer"
 
 class String
   # Wraps the current string in the <tt>ActiveSupport::StringInquirer</tt> class,

@@ -1,4 +1,6 @@
-require 'action_dispatch/journey/visitors'
+# frozen_string_literal: true
+
+require "action_dispatch/journey/visitors"
 
 module ActionDispatch
   module Journey # :nodoc:
@@ -18,7 +20,7 @@ module ActionDispatch
         end
 
         def to_s
-          Visitors::String::INSTANCE.accept(self, '')
+          Visitors::String::INSTANCE.accept(self, "")
         end
 
         def to_dot
@@ -30,7 +32,7 @@ module ActionDispatch
         end
 
         def name
-          left.tr '*:'.freeze, ''.freeze
+          -left.tr("*:", "")
         end
 
         def type
@@ -42,6 +44,7 @@ module ActionDispatch
         def terminal?; false; end
         def star?; false; end
         def cat?; false; end
+        def group?; false; end
       end
 
       class Terminal < Node # :nodoc:
@@ -62,12 +65,12 @@ module ActionDispatch
         def literal?; false; end
       end
 
-      %w{ Symbol Slash Dot }.each do |t|
-        class_eval <<-eoruby, __FILE__, __LINE__ + 1
-          class #{t} < Terminal;
-            def type; :#{t.upcase}; end
-          end
-        eoruby
+      class Slash < Terminal # :nodoc:
+        def type; :SLASH; end
+      end
+
+      class Dot < Terminal # :nodoc:
+        def type; :DOT; end
       end
 
       class Symbol < Terminal # :nodoc:
@@ -76,16 +79,18 @@ module ActionDispatch
         attr_reader :name
 
         DEFAULT_EXP = /[^\.\/\?]+/
-        def initialize(left)
-          super
-          @regexp = DEFAULT_EXP
-          @name = left.tr '*:'.freeze, ''.freeze
+        GREEDY_EXP = /(.+)/
+        def initialize(left, regexp = DEFAULT_EXP)
+          super(left)
+          @regexp = regexp
+          @name = -left.tr("*:", "")
         end
 
         def default_regexp?
           regexp == DEFAULT_EXP
         end
 
+        def type; :SYMBOL; end
         def symbol?; true; end
       end
 
@@ -95,6 +100,7 @@ module ActionDispatch
 
       class Group < Unary # :nodoc:
         def type; :GROUP; end
+        def group?; true; end
       end
 
       class Star < Unary # :nodoc:
@@ -102,7 +108,7 @@ module ActionDispatch
         def type; :STAR; end
 
         def name
-          left.name.tr '*:', ''
+          left.name.tr "*:", ""
         end
       end
 

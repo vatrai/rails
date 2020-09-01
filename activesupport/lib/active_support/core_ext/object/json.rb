@@ -1,15 +1,20 @@
-# Hack to load json gem first so we can overwrite its to_json.
-require 'json'
-require 'bigdecimal'
-require 'active_support/core_ext/big_decimal/conversions' # for #to_s
-require 'active_support/core_ext/hash/except'
-require 'active_support/core_ext/hash/slice'
-require 'active_support/core_ext/object/instance_variables'
-require 'time'
-require 'active_support/core_ext/time/conversions'
-require 'active_support/core_ext/date_time/conversions'
-require 'active_support/core_ext/date/conversions'
+# frozen_string_literal: true
 
+# Hack to load json gem first so we can overwrite its to_json.
+require "json"
+require "bigdecimal"
+require "uri/generic"
+require "pathname"
+require "active_support/core_ext/big_decimal/conversions" # for #to_s
+require "active_support/core_ext/hash/except"
+require "active_support/core_ext/hash/slice"
+require "active_support/core_ext/object/instance_variables"
+require "time"
+require "active_support/core_ext/time/conversions"
+require "active_support/core_ext/date_time/conversions"
+require "active_support/core_ext/date/conversions"
+
+#--
 # The JSON gem adds a few modules to Ruby core classes containing :to_json definition, overwriting
 # their default behavior. That said, we need to define the basic to_json method in all of them,
 # otherwise they will always use to_json gem implementation, which is backwards incompatible in
@@ -40,7 +45,7 @@ module ActiveSupport
   end
 end
 
-[Object, Array, FalseClass, Float, Hash, Integer, NilClass, String, TrueClass, Enumerable].reverse_each do |klass|
+[Enumerable, Object, Array, FalseClass, Float, Hash, Integer, NilClass, String, TrueClass].reverse_each do |klass|
   klass.prepend(ActiveSupport::ToJsonWithActiveSupportEncoder)
 end
 
@@ -131,6 +136,12 @@ module Enumerable
   end
 end
 
+class IO
+  def as_json(options = nil) #:nodoc:
+    to_s
+  end
+end
+
 class Range
   def as_json(options = nil) #:nodoc:
     to_s
@@ -158,7 +169,11 @@ class Hash
       self
     end
 
-    Hash[subset.map { |k, v| [k.to_s, options ? v.as_json(options.dup) : v.as_json] }]
+    result = {}
+    subset.each do |k, v|
+      result[k.to_s] = options ? v.as_json(options.dup) : v.as_json
+    end
+    result
   end
 end
 
@@ -187,13 +202,31 @@ class DateTime
     if ActiveSupport::JSON::Encoding.use_standard_json_time_format
       xmlschema(ActiveSupport::JSON::Encoding.time_precision)
     else
-      strftime('%Y/%m/%d %H:%M:%S %z')
+      strftime("%Y/%m/%d %H:%M:%S %z")
     end
+  end
+end
+
+class URI::Generic #:nodoc:
+  def as_json(options = nil)
+    to_s
+  end
+end
+
+class Pathname #:nodoc:
+  def as_json(options = nil)
+    to_s
   end
 end
 
 class Process::Status #:nodoc:
   def as_json(options = nil)
-    { :exitstatus => exitstatus, :pid => pid }
+    { exitstatus: exitstatus, pid: pid }
+  end
+end
+
+class Exception
+  def as_json(options = nil)
+    to_s
   end
 end

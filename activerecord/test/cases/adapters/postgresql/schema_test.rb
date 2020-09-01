@@ -1,6 +1,8 @@
+# frozen_string_literal: true
+
 require "cases/helper"
-require 'models/default'
-require 'support/schema_dumping_helper'
+require "models/default"
+require "support/schema_dumping_helper"
 
 module PGSchemaHelper
   def with_schema_search_path(schema_search_path)
@@ -17,32 +19,34 @@ class SchemaTest < ActiveRecord::PostgreSQLTestCase
   include PGSchemaHelper
   self.use_transactional_tests = false
 
-  SCHEMA_NAME = 'test_schema'
-  SCHEMA2_NAME = 'test_schema2'
-  TABLE_NAME = 'things'
-  CAPITALIZED_TABLE_NAME = 'Things'
-  INDEX_A_NAME = 'a_index_things_on_name'
-  INDEX_B_NAME = 'b_index_things_on_different_columns_in_each_schema'
-  INDEX_C_NAME = 'c_index_full_text_search'
-  INDEX_D_NAME = 'd_index_things_on_description_desc'
-  INDEX_E_NAME = 'e_index_things_on_name_vector'
-  INDEX_A_COLUMN = 'name'
-  INDEX_B_COLUMN_S1 = 'email'
-  INDEX_B_COLUMN_S2 = 'moment'
-  INDEX_C_COLUMN = %q{(to_tsvector('english', coalesce(things.name, '')))}
-  INDEX_D_COLUMN = 'description'
-  INDEX_E_COLUMN = 'name_vector'
+  SCHEMA_NAME = "test_schema"
+  SCHEMA2_NAME = "test_schema2"
+  TABLE_NAME = "things"
+  CAPITALIZED_TABLE_NAME = "Things"
+  INDEX_A_NAME = "a_index_things_on_name"
+  INDEX_B_NAME = "b_index_things_on_different_columns_in_each_schema"
+  INDEX_C_NAME = "c_index_full_text_search"
+  INDEX_D_NAME = "d_index_things_on_description_desc"
+  INDEX_E_NAME = "e_index_things_on_name_vector"
+  INDEX_A_COLUMN = "name"
+  INDEX_B_COLUMN_S1 = "email"
+  INDEX_B_COLUMN_S2 = "moment"
+  INDEX_C_COLUMN = "(to_tsvector('english', coalesce(things.name, '')))"
+  INDEX_D_COLUMN = "description"
+  INDEX_E_COLUMN = "name_vector"
   COLUMNS = [
-    'id integer',
-    'name character varying(50)',
-    'email character varying(50)',
-    'description character varying(100)',
-    'name_vector tsvector',
-    'moment timestamp without time zone default now()'
+    "id integer",
+    "name character varying(50)",
+    "email character varying(50)",
+    "description character varying(100)",
+    "name_vector tsvector",
+    "moment timestamp without time zone default now()"
   ]
-  PK_TABLE_NAME = 'table_with_pk'
-  UNMATCHED_SEQUENCE_NAME = 'unmatched_primary_key_default_value_seq'
-  UNMATCHED_PK_TABLE_NAME = 'table_with_unmatched_sequence_for_pk'
+  PK_TABLE_NAME = "table_with_pk"
+  UNMATCHED_SEQUENCE_NAME = "unmatched_primary_key_default_value_seq"
+  UNMATCHED_PK_TABLE_NAME = "table_with_unmatched_sequence_for_pk"
+  PARTITIONED_TABLE = "measurements"
+  PARTITIONED_TABLE_INDEX = "index_measurements_on_logdate_and_city_id"
 
   class Thing1 < ActiveRecord::Base
     self.table_name = "test_schema.things"
@@ -61,7 +65,7 @@ class SchemaTest < ActiveRecord::PostgreSQLTestCase
   end
 
   class Thing5 < ActiveRecord::Base
-    self.table_name = 'things'
+    self.table_name = "things"
   end
 
   class Song < ActiveRecord::Base
@@ -91,6 +95,7 @@ class SchemaTest < ActiveRecord::PostgreSQLTestCase
     @connection.execute "CREATE INDEX #{INDEX_E_NAME} ON #{SCHEMA_NAME}.#{TABLE_NAME}  USING gin (#{INDEX_E_COLUMN});"
     @connection.execute "CREATE INDEX #{INDEX_E_NAME} ON #{SCHEMA2_NAME}.#{TABLE_NAME}  USING gin (#{INDEX_E_COLUMN});"
     @connection.execute "CREATE TABLE #{SCHEMA_NAME}.#{PK_TABLE_NAME} (id serial primary key)"
+    @connection.execute "CREATE TABLE #{SCHEMA2_NAME}.#{PK_TABLE_NAME} (id serial primary key)"
     @connection.execute "CREATE SEQUENCE #{SCHEMA_NAME}.#{UNMATCHED_SEQUENCE_NAME}"
     @connection.execute "CREATE TABLE #{SCHEMA_NAME}.#{UNMATCHED_PK_TABLE_NAME} (id integer NOT NULL DEFAULT nextval('#{SCHEMA_NAME}.#{UNMATCHED_SEQUENCE_NAME}'::regclass), CONSTRAINT unmatched_pkey PRIMARY KEY (id))"
   end
@@ -101,27 +106,27 @@ class SchemaTest < ActiveRecord::PostgreSQLTestCase
   end
 
   def test_schema_names
-    assert_equal ["public", "test_schema", "test_schema2"], @connection.schema_names
+    schema_names = @connection.schema_names
+    assert_includes schema_names, "public"
+    assert_includes schema_names, "test_schema"
+    assert_includes schema_names, "test_schema2"
+    assert_includes schema_names, "hint_plan" if @connection.supports_optimizer_hints?
   end
 
   def test_create_schema
-    begin
-      @connection.create_schema "test_schema3"
-      assert @connection.schema_names.include? "test_schema3"
-    ensure
-      @connection.drop_schema "test_schema3"
-    end
+    @connection.create_schema "test_schema3"
+    assert @connection.schema_names.include? "test_schema3"
+  ensure
+    @connection.drop_schema "test_schema3"
   end
 
   def test_raise_create_schema_with_existing_schema
-    begin
+    @connection.create_schema "test_schema3"
+    assert_raises(ActiveRecord::StatementInvalid) do
       @connection.create_schema "test_schema3"
-      assert_raises(ActiveRecord::StatementInvalid) do
-        @connection.create_schema "test_schema3"
-      end
-    ensure
-      @connection.drop_schema "test_schema3"
     end
+  ensure
+    @connection.drop_schema "test_schema3"
   end
 
   def test_drop_schema
@@ -130,7 +135,7 @@ class SchemaTest < ActiveRecord::PostgreSQLTestCase
     ensure
       @connection.drop_schema "test_schema3"
     end
-    assert !@connection.schema_names.include?("test_schema3")
+    assert_not_includes @connection.schema_names, "test_schema3"
   end
 
   def test_drop_schema_if_exists
@@ -143,7 +148,7 @@ class SchemaTest < ActiveRecord::PostgreSQLTestCase
   def test_habtm_table_name_with_schema
     ActiveRecord::Base.connection.drop_schema "music", if_exists: true
     ActiveRecord::Base.connection.create_schema "music"
-    ActiveRecord::Base.connection.execute <<-SQL
+    ActiveRecord::Base.connection.execute <<~SQL
       CREATE TABLE music.albums (id serial primary key);
       CREATE TABLE music.songs (id serial primary key);
       CREATE TABLE music.albums_songs (album_id integer, song_id integer);
@@ -166,60 +171,62 @@ class SchemaTest < ActiveRecord::PostgreSQLTestCase
     end
   end
 
-  def test_raise_wraped_exception_on_bad_prepare
+  def test_raise_wrapped_exception_on_bad_prepare
     assert_raises(ActiveRecord::StatementInvalid) do
-      @connection.exec_query "select * from developers where id = ?", 'sql', [[nil, 1]]
+      @connection.exec_query "select * from developers where id = ?", "sql", [bind_param(1)]
     end
   end
 
-  def test_schema_change_with_prepared_stmt
-    altered = false
-    @connection.exec_query "select * from developers where id = $1", 'sql', [bind_param(1)]
-    @connection.exec_query "alter table developers add column zomg int", 'sql', []
-    altered = true
-    @connection.exec_query "select * from developers where id = $1", 'sql', [bind_param(1)]
-  ensure
-    # We are not using DROP COLUMN IF EXISTS because that syntax is only
-    # supported by pg 9.X
-    @connection.exec_query("alter table developers drop column zomg", 'sql', []) if altered
+  if ActiveRecord::Base.connection.prepared_statements
+    def test_schema_change_with_prepared_stmt
+      altered = false
+      @connection.exec_query "select * from developers where id = $1", "sql", [bind_param(1)]
+      @connection.exec_query "alter table developers add column zomg int", "sql", []
+      altered = true
+      @connection.exec_query "select * from developers where id = $1", "sql", [bind_param(1)]
+    ensure
+      # We are not using DROP COLUMN IF EXISTS because that syntax is only
+      # supported by pg 9.X
+      @connection.exec_query("alter table developers drop column zomg", "sql", []) if altered
+    end
   end
 
-  def test_table_exists?
+  def test_data_source_exists?
     [Thing1, Thing2, Thing3, Thing4].each do |klass|
       name = klass.table_name
-      assert @connection.table_exists?(name), "'#{name}' table should exist"
+      assert @connection.data_source_exists?(name), "'#{name}' data_source should exist"
     end
   end
 
-  def test_table_exists_when_on_schema_search_path
+  def test_data_source_exists_when_on_schema_search_path
     with_schema_search_path(SCHEMA_NAME) do
-      assert(@connection.table_exists?(TABLE_NAME), "table should exist and be found")
+      assert(@connection.data_source_exists?(TABLE_NAME), "data_source should exist and be found")
     end
   end
 
-  def test_table_exists_when_not_on_schema_search_path
-    with_schema_search_path('PUBLIC') do
-      assert(!@connection.table_exists?(TABLE_NAME), "table exists but should not be found")
+  def test_data_source_exists_when_not_on_schema_search_path
+    with_schema_search_path("PUBLIC") do
+      assert_not(@connection.data_source_exists?(TABLE_NAME), "data_source exists but should not be found")
     end
   end
 
-  def test_table_exists_wrong_schema
-    assert(!@connection.table_exists?("foo.things"), "table should not exist")
+  def test_data_source_exists_wrong_schema
+    assert_not(@connection.data_source_exists?("foo.things"), "data_source should not exist")
   end
 
-  def test_table_exists_quoted_names
+  def test_data_source_exists_quoted_names
     [ %("#{SCHEMA_NAME}"."#{TABLE_NAME}"), %(#{SCHEMA_NAME}."#{TABLE_NAME}"), %(#{SCHEMA_NAME}."#{TABLE_NAME}")].each do |given|
-      assert(@connection.table_exists?(given), "table should exist when specified as #{given}")
+      assert(@connection.data_source_exists?(given), "data_source should exist when specified as #{given}")
     end
     with_schema_search_path(SCHEMA_NAME) do
       given = %("#{TABLE_NAME}")
-      assert(@connection.table_exists?(given), "table should exist when specified as #{given}")
+      assert(@connection.data_source_exists?(given), "data_source should exist when specified as #{given}")
     end
   end
 
-  def test_table_exists_quoted_table
+  def test_data_source_exists_quoted_table
     with_schema_search_path(SCHEMA_NAME) do
-        assert(@connection.table_exists?('"things.table"'), "table should exist")
+      assert(@connection.data_source_exists?('"things.table"'), "data_source should exist")
     end
   end
 
@@ -244,9 +251,9 @@ class SchemaTest < ActiveRecord::PostgreSQLTestCase
   end
 
   def test_proper_encoding_of_table_name
-    assert_equal '"table_name"', @connection.quote_table_name('table_name')
+    assert_equal '"table_name"', @connection.quote_table_name("table_name")
     assert_equal '"table.name"', @connection.quote_table_name('"table.name"')
-    assert_equal '"schema_name"."table_name"', @connection.quote_table_name('schema_name.table_name')
+    assert_equal '"schema_name"."table_name"', @connection.quote_table_name("schema_name.table_name")
     assert_equal '"schema_name"."table.name"', @connection.quote_table_name('schema_name."table.name"')
     assert_equal '"schema.name"."table_name"', @connection.quote_table_name('"schema.name".table_name')
     assert_equal '"schema.name"."table.name"', @connection.quote_table_name('"schema.name"."table.name"')
@@ -258,25 +265,25 @@ class SchemaTest < ActiveRecord::PostgreSQLTestCase
     assert_equal 0, Thing3.count
     assert_equal 0, Thing4.count
 
-    Thing1.create(:id => 1, :name => "thing1", :email => "thing1@localhost", :moment => Time.now)
+    Thing1.create(id: 1, name: "thing1", email: "thing1@localhost", moment: Time.now)
     assert_equal 1, Thing1.count
     assert_equal 0, Thing2.count
     assert_equal 0, Thing3.count
     assert_equal 0, Thing4.count
 
-    Thing2.create(:id => 1, :name => "thing1", :email => "thing1@localhost", :moment => Time.now)
+    Thing2.create(id: 1, name: "thing1", email: "thing1@localhost", moment: Time.now)
     assert_equal 1, Thing1.count
     assert_equal 1, Thing2.count
     assert_equal 0, Thing3.count
     assert_equal 0, Thing4.count
 
-    Thing3.create(:id => 1, :name => "thing1", :email => "thing1@localhost", :moment => Time.now)
+    Thing3.create(id: 1, name: "thing1", email: "thing1@localhost", moment: Time.now)
     assert_equal 1, Thing1.count
     assert_equal 1, Thing2.count
     assert_equal 1, Thing3.count
     assert_equal 0, Thing4.count
 
-    Thing4.create(:id => 1, :name => "thing1", :email => "thing1@localhost", :moment => Time.now)
+    Thing4.create(id: 1, name: "thing1", email: "thing1@localhost", moment: Time.now)
     assert_equal 1, Thing1.count
     assert_equal 1, Thing2.count
     assert_equal 1, Thing3.count
@@ -285,7 +292,7 @@ class SchemaTest < ActiveRecord::PostgreSQLTestCase
 
   def test_raise_on_unquoted_schema_name
     assert_raises(ActiveRecord::StatementInvalid) do
-      with_schema_search_path '$user,public'
+      with_schema_search_path "$user,public"
     end
   end
 
@@ -299,13 +306,19 @@ class SchemaTest < ActiveRecord::PostgreSQLTestCase
 
   def test_index_name_exists
     with_schema_search_path(SCHEMA_NAME) do
-      assert @connection.index_name_exists?(TABLE_NAME, INDEX_A_NAME, true)
-      assert @connection.index_name_exists?(TABLE_NAME, INDEX_B_NAME, true)
-      assert @connection.index_name_exists?(TABLE_NAME, INDEX_C_NAME, true)
-      assert @connection.index_name_exists?(TABLE_NAME, INDEX_D_NAME, true)
-      assert @connection.index_name_exists?(TABLE_NAME, INDEX_E_NAME, true)
-      assert @connection.index_name_exists?(TABLE_NAME, INDEX_E_NAME, true)
-      assert_not @connection.index_name_exists?(TABLE_NAME, 'missing_index', true)
+      assert @connection.index_name_exists?(TABLE_NAME, INDEX_A_NAME)
+      assert @connection.index_name_exists?(TABLE_NAME, INDEX_B_NAME)
+      assert @connection.index_name_exists?(TABLE_NAME, INDEX_C_NAME)
+      assert @connection.index_name_exists?(TABLE_NAME, INDEX_D_NAME)
+      assert @connection.index_name_exists?(TABLE_NAME, INDEX_E_NAME)
+      assert @connection.index_name_exists?(TABLE_NAME, INDEX_E_NAME)
+      assert_not @connection.index_name_exists?(TABLE_NAME, "missing_index")
+
+      if supports_partitioned_indexes?
+        create_partitioned_table
+        create_partitioned_table_index
+        assert @connection.index_name_exists?(PARTITIONED_TABLE, PARTITIONED_TABLE_INDEX)
+      end
     end
   end
 
@@ -321,13 +334,62 @@ class SchemaTest < ActiveRecord::PostgreSQLTestCase
     do_dump_index_tests_for_schema("public, #{SCHEMA_NAME}", INDEX_A_COLUMN, INDEX_B_COLUMN_S1, INDEX_D_COLUMN, INDEX_E_COLUMN)
   end
 
+  def test_dump_indexes_for_table_with_scheme_specified_in_name
+    indexes = @connection.indexes("#{SCHEMA_NAME}.#{TABLE_NAME}")
+    assert_equal 5, indexes.size
+
+    if supports_partitioned_indexes?
+      create_partitioned_table
+      create_partitioned_table_index
+      indexes = @connection.indexes("#{SCHEMA_NAME}.#{PARTITIONED_TABLE}")
+      assert_equal 1, indexes.size
+    end
+  end
+
   def test_with_uppercase_index_name
-    @connection.execute "CREATE INDEX \"things_Index\" ON #{SCHEMA_NAME}.things (name)"
-    assert_nothing_raised { @connection.remove_index "things", name: "#{SCHEMA_NAME}.things_Index"}
     @connection.execute "CREATE INDEX \"things_Index\" ON #{SCHEMA_NAME}.things (name)"
 
     with_schema_search_path SCHEMA_NAME do
-      assert_nothing_raised { @connection.remove_index "things", name: "things_Index"}
+      assert_nothing_raised { @connection.remove_index "things", name: "things_Index" }
+    end
+
+    if supports_partitioned_indexes?
+      create_partitioned_table
+      @connection.execute "CREATE INDEX \"#{PARTITIONED_TABLE}_Index\" ON #{SCHEMA_NAME}.#{PARTITIONED_TABLE} (logdate, city_id)"
+
+      with_schema_search_path SCHEMA_NAME do
+        assert_nothing_raised { @connection.remove_index PARTITIONED_TABLE, name: "#{PARTITIONED_TABLE}_Index" }
+      end
+    end
+  end
+
+  def test_remove_index_when_schema_specified
+    @connection.execute "CREATE INDEX \"things_Index\" ON #{SCHEMA_NAME}.things (name)"
+    assert_nothing_raised { @connection.remove_index "things", name: "#{SCHEMA_NAME}.things_Index" }
+
+    @connection.execute "CREATE INDEX \"things_Index\" ON #{SCHEMA_NAME}.things (name)"
+    assert_nothing_raised { @connection.remove_index "#{SCHEMA_NAME}.things", name: "things_Index" }
+
+    @connection.execute "CREATE INDEX \"things_Index\" ON #{SCHEMA_NAME}.things (name)"
+    assert_nothing_raised { @connection.remove_index "#{SCHEMA_NAME}.things", name: "#{SCHEMA_NAME}.things_Index" }
+
+    @connection.execute "CREATE INDEX \"things_Index\" ON #{SCHEMA_NAME}.things (name)"
+    assert_raises(ArgumentError) { @connection.remove_index "#{SCHEMA2_NAME}.things", name: "#{SCHEMA_NAME}.things_Index" }
+
+    if supports_partitioned_indexes?
+      create_partitioned_table
+
+      @connection.execute "CREATE INDEX \"#{PARTITIONED_TABLE}_Index\" ON #{SCHEMA_NAME}.#{PARTITIONED_TABLE} (logdate, city_id)"
+      assert_nothing_raised { @connection.remove_index PARTITIONED_TABLE, name: "#{SCHEMA_NAME}.#{PARTITIONED_TABLE}_Index" }
+
+      @connection.execute "CREATE INDEX \"#{PARTITIONED_TABLE}_Index\" ON #{SCHEMA_NAME}.#{PARTITIONED_TABLE} (logdate, city_id)"
+      assert_nothing_raised { @connection.remove_index "#{SCHEMA_NAME}.#{PARTITIONED_TABLE}", name: "#{PARTITIONED_TABLE}_Index" }
+
+      @connection.execute "CREATE INDEX \"#{PARTITIONED_TABLE}_Index\" ON #{SCHEMA_NAME}.#{PARTITIONED_TABLE} (logdate, city_id)"
+      assert_nothing_raised { @connection.remove_index "#{SCHEMA_NAME}.#{PARTITIONED_TABLE}", name: "#{SCHEMA_NAME}.#{PARTITIONED_TABLE}_Index" }
+
+      @connection.execute "CREATE INDEX \"#{PARTITIONED_TABLE}_Index\" ON #{SCHEMA_NAME}.#{PARTITIONED_TABLE} (logdate, city_id)"
+      assert_raises(ArgumentError) { @connection.remove_index "#{SCHEMA2_NAME}.#{PARTITIONED_TABLE}", name: "#{SCHEMA_NAME}.#{PARTITIONED_TABLE}_Index" }
     end
   end
 
@@ -337,21 +399,13 @@ class SchemaTest < ActiveRecord::PostgreSQLTestCase
       %(#{SCHEMA_NAME}."#{PK_TABLE_NAME}"),
       %(#{SCHEMA_NAME}.#{PK_TABLE_NAME})
     ].each do |given|
-      assert_equal 'id', @connection.primary_key(given), "primary key should be found when table referenced as #{given}"
+      assert_equal "id", @connection.primary_key(given), "primary key should be found when table referenced as #{given}"
     end
   end
 
   def test_primary_key_assuming_schema_search_path
-    with_schema_search_path(SCHEMA_NAME) do
-      assert_equal 'id', @connection.primary_key(PK_TABLE_NAME), "primary key should be found"
-    end
-  end
-
-  def test_primary_key_raises_error_if_table_not_found_on_schema_search_path
-    with_schema_search_path(SCHEMA2_NAME) do
-      assert_raises(ActiveRecord::StatementInvalid) do
-        @connection.primary_key(PK_TABLE_NAME)
-      end
+    with_schema_search_path("#{SCHEMA_NAME}, #{SCHEMA2_NAME}") do
+      assert_equal "id", @connection.primary_key(PK_TABLE_NAME), "primary key should be found"
     end
   end
 
@@ -362,19 +416,19 @@ class SchemaTest < ActiveRecord::PostgreSQLTestCase
       %("#{SCHEMA_NAME}"."#{UNMATCHED_PK_TABLE_NAME}")
     ].each do |given|
       pk, seq = @connection.pk_and_sequence_for(given)
-      assert_equal 'id', pk, "primary key should be found when table referenced as #{given}"
+      assert_equal "id", pk, "primary key should be found when table referenced as #{given}"
       assert_equal pg_name.new(SCHEMA_NAME, "#{PK_TABLE_NAME}_id_seq"), seq, "sequence name should be found when table referenced as #{given}" if given == %("#{SCHEMA_NAME}"."#{PK_TABLE_NAME}")
-      assert_equal pg_name.new(SCHEMA_NAME, UNMATCHED_SEQUENCE_NAME), seq, "sequence name should be found when table referenced as #{given}" if given ==  %("#{SCHEMA_NAME}"."#{UNMATCHED_PK_TABLE_NAME}")
+      assert_equal pg_name.new(SCHEMA_NAME, UNMATCHED_SEQUENCE_NAME), seq, "sequence name should be found when table referenced as #{given}" if given == %("#{SCHEMA_NAME}"."#{UNMATCHED_PK_TABLE_NAME}")
     end
   end
 
   def test_current_schema
     {
-      %('$user',public)                        => 'public',
+      %('$user',public)                        => "public",
       SCHEMA_NAME                              => SCHEMA_NAME,
       %(#{SCHEMA2_NAME},#{SCHEMA_NAME},public) => SCHEMA2_NAME,
-      %(public,#{SCHEMA2_NAME},#{SCHEMA_NAME}) => 'public'
-    }.each do |given,expect|
+      %(public,#{SCHEMA2_NAME},#{SCHEMA_NAME}) => "public"
+    }.each do |given, expect|
       with_schema_search_path(given) { assert_equal expect, @connection.current_schema }
     end
   end
@@ -382,7 +436,7 @@ class SchemaTest < ActiveRecord::PostgreSQLTestCase
   def test_prepared_statements_with_multiple_schemas
     [SCHEMA_NAME, SCHEMA2_NAME].each do |schema_name|
       with_schema_search_path schema_name do
-        Thing5.create(:id => 1, :name => "thing inside #{SCHEMA_NAME}", :email => "thing1@localhost", :moment => Time.now)
+        Thing5.create(id: 1, name: "thing inside #{SCHEMA_NAME}", email: "thing1@localhost", moment: Time.now)
       end
     end
 
@@ -395,11 +449,11 @@ class SchemaTest < ActiveRecord::PostgreSQLTestCase
 
   def test_schema_exists?
     {
-      'public'     => true,
+      "public"     => true,
       SCHEMA_NAME  => true,
       SCHEMA2_NAME => true,
-      'darkside'   => false
-    }.each do |given,expect|
+      "darkside"   => false
+    }.each do |given, expect|
       assert_equal expect, @connection.schema_exists?(given)
     end
   end
@@ -423,25 +477,29 @@ class SchemaTest < ActiveRecord::PostgreSQLTestCase
   private
     def columns(table_name)
       @connection.send(:column_definitions, table_name).map do |name, type, default|
-        "#{name} #{type}" + (default ? " default #{default}" : '')
+        "#{name} #{type}" + (default ? " default #{default}" : "")
       end
     end
 
     def do_dump_index_tests_for_schema(this_schema_name, first_index_column_name, second_index_column_name, third_index_column_name, fourth_index_column_name)
       with_schema_search_path(this_schema_name) do
         indexes = @connection.indexes(TABLE_NAME).sort_by(&:name)
-        assert_equal 4,indexes.size
+        assert_equal 5, indexes.size
 
-        do_dump_index_assertions_for_one_index(indexes[0], INDEX_A_NAME, first_index_column_name)
-        do_dump_index_assertions_for_one_index(indexes[1], INDEX_B_NAME, second_index_column_name)
-        do_dump_index_assertions_for_one_index(indexes[2], INDEX_D_NAME, third_index_column_name)
-        do_dump_index_assertions_for_one_index(indexes[3], INDEX_E_NAME, fourth_index_column_name)
+        index_a, index_b, index_c, index_d, index_e = indexes
 
-        indexes.select{|i| i.name != INDEX_E_NAME}.each do |index|
-           assert_equal :btree, index.using
-        end
-        assert_equal :gin, indexes.select{|i| i.name == INDEX_E_NAME}[0].using
-        assert_equal :desc, indexes.select{|i| i.name == INDEX_D_NAME}[0].orders[INDEX_D_COLUMN]
+        do_dump_index_assertions_for_one_index(index_a, INDEX_A_NAME, first_index_column_name)
+        do_dump_index_assertions_for_one_index(index_b, INDEX_B_NAME, second_index_column_name)
+        do_dump_index_assertions_for_one_index(index_d, INDEX_D_NAME, third_index_column_name)
+        do_dump_index_assertions_for_one_index(index_e, INDEX_E_NAME, fourth_index_column_name)
+
+        assert_equal :btree, index_a.using
+        assert_equal :btree, index_b.using
+        assert_equal :gin,   index_c.using
+        assert_equal :btree, index_d.using
+        assert_equal :gin,   index_e.using
+
+        assert_equal :desc,  index_d.orders
       end
     end
 
@@ -454,6 +512,14 @@ class SchemaTest < ActiveRecord::PostgreSQLTestCase
 
     def bind_param(value)
       ActiveRecord::Relation::QueryAttribute.new(nil, value, ActiveRecord::Type::Value.new)
+    end
+
+    def create_partitioned_table
+      @connection.execute "CREATE TABLE #{SCHEMA_NAME}.\"#{PARTITIONED_TABLE}\" (city_id integer not null, logdate date not null) PARTITION BY LIST (city_id)"
+    end
+
+    def create_partitioned_table_index
+      @connection.execute "CREATE INDEX #{PARTITIONED_TABLE_INDEX} ON #{SCHEMA_NAME}.#{PARTITIONED_TABLE} (logdate, city_id)"
     end
 end
 
@@ -479,6 +545,78 @@ class SchemaForeignKeyTest < ActiveRecord::PostgreSQLTestCase
     @connection.drop_table "wagons", if_exists: true
     @connection.drop_table "my_schema.trains", if_exists: true
     @connection.drop_schema "my_schema", if_exists: true
+  end
+end
+
+class SchemaIndexOpclassTest < ActiveRecord::PostgreSQLTestCase
+  include SchemaDumpingHelper
+
+  setup do
+    @connection = ActiveRecord::Base.connection
+    @connection.create_table "trains" do |t|
+      t.string :name
+      t.string :position
+      t.text :description
+    end
+  end
+
+  teardown do
+    @connection.drop_table "trains", if_exists: true
+  end
+
+  def test_string_opclass_is_dumped
+    @connection.execute "CREATE INDEX trains_name_and_description ON trains USING btree(name text_pattern_ops, description text_pattern_ops)"
+
+    output = dump_table_schema "trains"
+
+    assert_match(/opclass: :text_pattern_ops/, output)
+  end
+
+  def test_non_default_opclass_is_dumped
+    @connection.execute "CREATE INDEX trains_name_and_description ON trains USING btree(name, description text_pattern_ops)"
+
+    output = dump_table_schema "trains"
+
+    assert_match(/opclass: \{ description: :text_pattern_ops \}/, output)
+  end
+
+  def test_opclass_class_parsing_on_non_reserved_and_cannot_be_function_or_type_keyword
+    @connection.enable_extension("pg_trgm")
+    @connection.execute "CREATE INDEX trains_position ON trains USING gin(position gin_trgm_ops)"
+    @connection.execute "CREATE INDEX trains_name_and_position ON trains USING btree(name, position text_pattern_ops)"
+
+    output = dump_table_schema "trains"
+
+    assert_match(/opclass: :gin_trgm_ops/, output)
+    assert_match(/opclass: \{ position: :text_pattern_ops \}/, output)
+  end
+end
+
+class SchemaIndexNullsOrderTest < ActiveRecord::PostgreSQLTestCase
+  include SchemaDumpingHelper
+
+  setup do
+    @connection = ActiveRecord::Base.connection
+    @connection.create_table "trains" do |t|
+      t.string :name
+      t.text :description
+    end
+  end
+
+  teardown do
+    @connection.drop_table "trains", if_exists: true
+  end
+
+  def test_nulls_order_is_dumped
+    @connection.execute "CREATE INDEX trains_name_and_description ON trains USING btree(name NULLS FIRST, description)"
+    output = dump_table_schema "trains"
+    assert_match(/order: \{ name: "NULLS FIRST" \}/, output)
+  end
+
+  def test_non_default_order_with_nulls_is_dumped
+    @connection.execute "CREATE INDEX trains_name_and_desc ON trains USING btree(name DESC NULLS LAST, description)"
+    output = dump_table_schema "trains"
+    assert_match(/order: \{ name: "DESC NULLS LAST" \}/, output)
   end
 end
 
@@ -516,7 +654,7 @@ class DefaultsUsingMultipleSchemasAndDomainTest < ActiveRecord::PostgreSQLTestCa
   end
 
   def test_decimal_defaults_in_new_schema_when_overriding_domain
-    assert_equal BigDecimal.new("3.14159265358979323846"), Default.new.decimal_col, "Default of decimal column was not correctly parsed"
+    assert_equal BigDecimal("3.14159265358979323846"), Default.new.decimal_col, "Default of decimal column was not correctly parsed"
   end
 
   def test_bpchar_defaults_in_new_schema_when_overriding_domain

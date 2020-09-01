@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "isolation/abstract_unit"
 
 module ApplicationTests
@@ -6,7 +8,6 @@ module ApplicationTests
 
     def setup
       build_app
-      boot_rails
       FileUtils.rm_rf("#{app_path}/config/environments")
       app_file "config/environments/development.rb", ""
       add_to_config <<-RUBY
@@ -36,7 +37,7 @@ module ApplicationTests
     end
 
     def assert_not_in_load_path(*path)
-      assert !$:.any? { |p| File.expand_path(p) == root(*path) }, "Load path includes '#{root(*path)}'. They are:\n-----\n #{$:.join("\n")}\n-----"
+      assert_not $:.any? { |p| File.expand_path(p) == root(*path) }, "Load path includes '#{root(*path)}'. They are:\n-----\n #{$:.join("\n")}\n-----"
     end
 
     test "booting up Rails yields a valid paths object" do
@@ -50,15 +51,17 @@ module ApplicationTests
       assert_path @paths["config/locales"],      "config/locales/en.yml"
       assert_path @paths["config/environment"],  "config/environment.rb"
       assert_path @paths["config/environments"], "config/environments/development.rb"
+      assert_path @paths["config/routes.rb"],    "config/routes.rb"
+      assert_path @paths["config/routes"],       "config/routes"
 
       assert_equal root("app", "controllers"), @paths["app/controllers"].expanded.first
     end
 
     test "booting up Rails yields a list of paths that are eager" do
       eager_load = @paths.eager_load
-      assert eager_load.include?(root("app/controllers"))
-      assert eager_load.include?(root("app/helpers"))
-      assert eager_load.include?(root("app/models"))
+      assert_includes eager_load, root("app/controllers")
+      assert_includes eager_load, root("app/helpers")
+      assert_includes eager_load, root("app/models")
     end
 
     test "environments has a glob equal to the current environment" do

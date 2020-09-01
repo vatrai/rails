@@ -1,11 +1,17 @@
-require 'generators/generators_test_helper'
-require 'rails/generators/rails/resource/resource_generator'
+# frozen_string_literal: true
+
+require "generators/generators_test_helper"
+require "rails/generators/rails/resource/resource_generator"
 
 class ResourceGeneratorTest < Rails::Generators::TestCase
   include GeneratorsTestHelper
   arguments %w(account)
 
-  setup :copy_routes
+  def setup
+    super
+    copy_routes
+    Rails::Generators::ModelHelpers.skip_warn = false
+  end
 
   def test_help_with_inherited_options
     content = run_generator ["--help"]
@@ -33,7 +39,7 @@ class ResourceGeneratorTest < Rails::Generators::TestCase
   def test_resource_controller_with_pluralized_class_name
     run_generator
     assert_file "app/controllers/accounts_controller.rb", /class AccountsController < ApplicationController/
-    assert_file "test/controllers/accounts_controller_test.rb", /class AccountsControllerTest < ActionController::TestCase/
+    assert_file "test/controllers/accounts_controller_test.rb", /class AccountsControllerTest < ActionDispatch::IntegrationTest/
 
     assert_file "app/helpers/accounts_helper.rb", /module AccountsHelper/
   end
@@ -59,21 +65,21 @@ class ResourceGeneratorTest < Rails::Generators::TestCase
   end
 
   def test_plural_names_are_singularized
-    content = run_generator ["accounts".freeze]
-    assert_file "app/models/account.rb", /class Account < ActiveRecord::Base/
+    content = run_generator ["accounts"]
+    assert_file "app/models/account.rb", /class Account < ApplicationRecord/
     assert_file "test/models/account_test.rb", /class AccountTest/
     assert_match(/\[WARNING\] The model name 'accounts' was recognized as a plural, using the singular 'account' instead\. Override with --force-plural or setup custom inflection rules for this noun before running the generator\./, content)
   end
 
   def test_plural_names_can_be_forced
     content = run_generator ["accounts", "--force-plural"]
-    assert_file "app/models/accounts.rb", /class Accounts < ActiveRecord::Base/
+    assert_file "app/models/accounts.rb", /class Accounts < ApplicationRecord/
     assert_file "test/models/accounts_test.rb", /class AccountsTest/
     assert_no_match(/\[WARNING\]/, content)
   end
 
   def test_mass_nouns_do_not_throw_warnings
-    content = run_generator ["sheep".freeze]
+    content = run_generator ["sheep"]
     assert_no_match(/\[WARNING\]/, content)
   end
 

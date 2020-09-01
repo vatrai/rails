@@ -1,15 +1,15 @@
-**DO NOT READ THIS FILE ON GITHUB, GUIDES ARE PUBLISHED ON http://guides.rubyonrails.org.**
+**DO NOT READ THIS FILE ON GITHUB, GUIDES ARE PUBLISHED ON https://guides.rubyonrails.org.**
 
 Maintenance Policy for Ruby on Rails
 ====================================
 
 Support of the Rails framework is divided into four groups: New features, bug
 fixes, security issues, and severe security issues. They are handled as
-follows, all versions in `X.Y.Z` format.
+follows, all versions, except for security releases, in `X.Y.Z`, format.
 
 --------------------------------------------------------------------------------
 
-Rails follows a shifted version of [semver](http://semver.org/):
+Rails follows a shifted version of [semver](https://semver.org/):
 
 **Patch `Z`**
 
@@ -44,7 +44,7 @@ from.
 In special situations, where someone from the Core Team agrees to support more series,
 they are included in the list of supported series.
 
-**Currently included series:** `4.2.Z`, `4.1.Z` (Supported by Rafael França).
+**Currently included series:** `6.0.Z`.
 
 Security Issues
 ---------------
@@ -54,21 +54,21 @@ and new versions in case of a security issue.
 
 These releases are created by taking the last released version, applying the
 security patches, and releasing. Those patches are then applied to the end of
-the x-y-stable branch. For example, a theoretical 1.2.3 security release would
+the x-y-stable branch. For example, a theoretical 1.2.2.1 security release would
 be built from 1.2.2, and then added to the end of 1-2-stable. This means that
 security releases are easy to upgrade to if you're running the latest version
 of Rails.
 
-**Currently included series:** `4.2.Z`, `4.1.Z`.
+**Currently included series:** `6.0.Z`, `5.2.Z`.
 
 Severe Security Issues
 ----------------------
 
-For severe security issues we will provide new versions as above, and also the
-last major release series will receive patches and new versions. The
+For severe security issues all releases in the current major series, and also the
+last release in the previous major series will receive patches and new versions. The
 classification of the security issue is judged by the core team.
 
-**Currently included series:** `4.2.Z`, `4.1.Z`, `3.2.Z`.
+**Currently included series:** `6.0.Z`, `5.2.Z`.
 
 Unsupported Release Series
 --------------------------

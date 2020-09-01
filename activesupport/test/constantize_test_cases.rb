@@ -1,4 +1,6 @@
-require 'dependencies_test_helpers'
+# frozen_string_literal: true
+
+require_relative "dependencies_test_helpers"
 
 module Ace
   module Base
@@ -73,6 +75,11 @@ module ConstantizeTestCases
         yield("RaisesNoMethodError")
       end
     end
+
+    with_autoloading_fixtures do
+      yield("Prepend::SubClassConflict")
+      assert_equal "constant", defined?(Prepend::SubClassConflict)
+    end
   end
 
   def run_safe_constantize_tests_on
@@ -100,10 +107,20 @@ module ConstantizeTestCases
     assert_nil yield("Ace::Gas::ConstantizeTestCases")
     assert_nil yield("#<Class:0x7b8b718b>::Nested_1")
     assert_nil yield("Ace::gas")
-    assert_nil yield('Object::ABC')
-    assert_nil yield('Object::Object::Object::ABC')
-    assert_nil yield('A::Object::B')
-    assert_nil yield('A::Object::Object::Object::B')
+    assert_nil yield("Object::ABC")
+    assert_nil yield("Object::Object::Object::ABC")
+    assert_nil yield("A::Object::B")
+    assert_nil yield("A::Object::Object::Object::B")
+
+    with_autoloading_fixtures do
+      assert_nil yield("Em")
+    end
+
+    assert_raises(LoadError) do
+      with_autoloading_fixtures do
+        yield("RaisesLoadError")
+      end
+    end
 
     assert_raises(NameError) do
       with_autoloading_fixtures do

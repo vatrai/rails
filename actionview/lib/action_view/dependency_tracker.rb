@@ -1,5 +1,7 @@
-require 'concurrent'
-require 'action_view/path_set'
+# frozen_string_literal: true
+
+require "concurrent/map"
+require "action_view/path_set"
 
 module ActionView
   class DependencyTracker # :nodoc:
@@ -7,18 +9,20 @@ module ActionView
 
     def self.find_dependencies(name, template, view_paths = nil)
       tracker = @trackers[template.handler]
-      return [] unless tracker.present?
+      return [] unless tracker
 
-      if tracker.respond_to?(:supports_view_paths?) && tracker.supports_view_paths?
-        tracker.call(name, template, view_paths)
-      else
-        tracker.call(name, template)
-      end
+      tracker.call(name, template, view_paths)
     end
 
     def self.register_tracker(extension, tracker)
       handler = Template.handler_for_extension(extension)
-      @trackers[handler] = tracker
+      if tracker.respond_to?(:supports_view_paths?)
+        @trackers[handler] = tracker
+      else
+        @trackers[handler] = lambda { |name, template, _|
+          tracker.call(name, template)
+        }
+      end
     end
 
     def self.remove_tracker(handler)
@@ -103,7 +107,6 @@ module ActionView
       attr_reader :name, :template
       private :name, :template
 
-
       private
         def source
           template.source
@@ -127,8 +130,9 @@ module ActionView
 
         def add_dependencies(render_dependencies, arguments, pattern)
           arguments.scan(pattern) do
-            add_dynamic_dependency(render_dependencies, Regexp.last_match[:dynamic])
-            add_static_dependency(render_dependencies, Regexp.last_match[:static])
+            match = Regexp.last_match
+            add_dynamic_dependency(render_dependencies, match[:dynamic])
+            add_static_dependency(render_dependencies, match[:static], match[:quote])
           end
         end
 
@@ -138,9 +142,14 @@ module ActionView
           end
         end
 
-        def add_static_dependency(dependencies, dependency)
+        def add_static_dependency(dependencies, dependency, quote_type)
+          if quote_type == '"'
+            # Ignore if there is interpolation
+            return if dependency.include?('#{')
+          end
+
           if dependency
-            if dependency.include?('/')
+            if dependency.include?("/")
               dependencies << dependency
             else
               dependencies << "#{directory}/#{dependency}"
@@ -151,17 +160,17 @@ module ActionView
         def resolve_directories(wildcard_dependencies)
           return [] unless @view_paths
 
-          wildcard_dependencies.each_with_object([]) do |query, templates|
-            @view_paths.find_all_with_query(query).each do |template|
-              templates << "#{File.dirname(query)}/#{File.basename(template).split('.').first}"
+          wildcard_dependencies.flat_map { |query, templates|
+            @view_paths.find_all_with_query(query).map do |template|
+              "#{File.dirname(query)}/#{File.basename(template).split('.').first}"
             end
-          end
+          }.sort
         end
 
         def explicit_dependencies
           dependencies = source.scan(EXPLICIT_DEPENDENCY).flatten.uniq
 
-          wildcards, explicits = dependencies.partition { |dependency| dependency[-1] == '*' }
+          wildcards, explicits = dependencies.partition { |dependency| dependency.end_with?("*") }
 
           (explicits + resolve_directories(wildcards)).uniq
         end

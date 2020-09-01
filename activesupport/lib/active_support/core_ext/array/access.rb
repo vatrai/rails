@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class Array
   # Returns the tail of the array from +position+.
   #
@@ -27,16 +29,28 @@ class Array
     end
   end
 
-  # Returns a copy of the Array without the specified elements.
+  # Returns a new array that includes the passed elements.
   #
-  #   people = ["David", "Rafael", "Aaron", "Todd"]
-  #   people.without "Aaron", "Todd"
-  #     => ["David", "Rafael"]
+  #   [ 1, 2, 3 ].including(4, 5) # => [ 1, 2, 3, 4, 5 ]
+  #   [ [ 0, 1 ] ].including([ [ 1, 0 ] ]) # => [ [ 0, 1 ], [ 1, 0 ] ]
+  def including(*elements)
+    self + elements.flatten(1)
+  end
+
+  # Returns a copy of the Array excluding the specified elements.
   #
-  # Note: This is an optimization of `Enumerable#without` that uses `Array#-`
-  # instead of `Array#reject` for performance reasons.
+  #   ["David", "Rafael", "Aaron", "Todd"].excluding("Aaron", "Todd") # => ["David", "Rafael"]
+  #   [ [ 0, 1 ], [ 1, 0 ] ].excluding([ [ 1, 0 ] ]) # => [ [ 0, 1 ] ]
+  #
+  # Note: This is an optimization of <tt>Enumerable#excluding</tt> that uses <tt>Array#-</tt>
+  # instead of <tt>Array#reject</tt> for performance reasons.
+  def excluding(*elements)
+    self - elements.flatten(1)
+  end
+
+  # Alias for #excluding.
   def without(*elements)
-    self - elements
+    excluding(*elements)
   end
 
   # Equal to <tt>self[1]</tt>.
@@ -72,5 +86,19 @@ class Array
   #   (1..42).to_a.forty_two # => 42
   def forty_two
     self[41]
+  end
+
+  # Equal to <tt>self[-3]</tt>.
+  #
+  #   %w( a b c d e ).third_to_last # => "c"
+  def third_to_last
+    self[-3]
+  end
+
+  # Equal to <tt>self[-2]</tt>.
+  #
+  #   %w( a b c d e ).second_to_last # => "d"
+  def second_to_last
+    self[-2]
   end
 end

@@ -1,4 +1,6 @@
-require 'sidekiq'
+# frozen_string_literal: true
+
+require "sidekiq"
 
 module ActiveJob
   module QueueAdapters
@@ -16,28 +18,28 @@ module ActiveJob
     #   Rails.application.config.active_job.queue_adapter = :sidekiq
     class SidekiqAdapter
       def enqueue(job) #:nodoc:
-        #Sidekiq::Client does not support symbols as keys
+        # Sidekiq::Client does not support symbols as keys
         job.provider_job_id = Sidekiq::Client.push \
-          'class'   => JobWrapper,
-          'wrapped' => job.class.to_s,
-          'queue'   => job.queue_name,
-          'args'    => [ job.serialize ]
+          "class"   => JobWrapper,
+          "wrapped" => job.class,
+          "queue"   => job.queue_name,
+          "args"    => [ job.serialize ]
       end
 
       def enqueue_at(job, timestamp) #:nodoc:
         job.provider_job_id = Sidekiq::Client.push \
-          'class'   => JobWrapper,
-          'wrapped' => job.class.to_s,
-          'queue'   => job.queue_name,
-          'args'    => [ job.serialize ],
-          'at'      => timestamp
+          "class"   => JobWrapper,
+          "wrapped" => job.class,
+          "queue"   => job.queue_name,
+          "args"    => [ job.serialize ],
+          "at"      => timestamp
       end
 
       class JobWrapper #:nodoc:
         include Sidekiq::Worker
 
         def perform(job_data)
-          Base.execute job_data
+          Base.execute job_data.merge("provider_job_id" => jid)
         end
       end
     end

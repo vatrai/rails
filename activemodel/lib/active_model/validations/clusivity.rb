@@ -1,4 +1,6 @@
-require 'active_support/core_ext/range'
+# frozen_string_literal: true
+
+require "active_support/core_ext/range"
 
 module ActiveModel
   module Validations
@@ -13,31 +15,35 @@ module ActiveModel
       end
 
     private
-
       def include?(record, value)
         members = if delimiter.respond_to?(:call)
-                    delimiter.call(record)
-                  elsif delimiter.respond_to?(:to_sym)
-                    record.send(delimiter)
-                  else
-                    delimiter
-                  end
+          delimiter.call(record)
+        elsif delimiter.respond_to?(:to_sym)
+          record.send(delimiter)
+        else
+          delimiter
+        end
 
-        members.send(inclusion_method(members), value)
+        if value.is_a?(Array)
+          value.all? { |v| members.send(inclusion_method(members), v) }
+        else
+          members.send(inclusion_method(members), value)
+        end
       end
 
       def delimiter
         @delimiter ||= options[:in] || options[:within]
       end
 
-      # In Ruby 1.9 <tt>Range#include?</tt> on non-number-or-time-ish ranges checks all
+      # After Ruby 2.2, <tt>Range#include?</tt> on non-number-or-time-ish ranges checks all
       # possible values in the range for equality, which is slower but more accurate.
       # <tt>Range#cover?</tt> uses the previous logic of comparing a value with the range
-      # endpoints, which is fast but is only accurate on Numeric, Time, or DateTime ranges.
+      # endpoints, which is fast but is only accurate on Numeric, Time, Date,
+      # or DateTime ranges.
       def inclusion_method(enumerable)
         if enumerable.is_a? Range
           case enumerable.first
-          when Numeric, Time, DateTime
+          when Numeric, Time, DateTime, Date
             :cover?
           else
             :include?

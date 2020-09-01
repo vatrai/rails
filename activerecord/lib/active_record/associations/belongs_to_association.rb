@@ -1,25 +1,28 @@
-module ActiveRecord
-  # = Active Record Belongs To Association
-  module Associations
-    class BelongsToAssociation < SingularAssociation #:nodoc:
+# frozen_string_literal: true
 
+module ActiveRecord
+  module Associations
+    # = Active Record Belongs To Association
+    class BelongsToAssociation < SingularAssociation #:nodoc:
       def handle_dependency
-        target.send(options[:dependent]) if load_target
+        return unless load_target
+
+        case options[:dependent]
+        when :destroy
+          target.destroy
+          raise ActiveRecord::Rollback unless target.destroyed?
+        else
+          target.send(options[:dependent])
+        end
       end
 
-      def replace(record)
-        if record
-          raise_on_type_mismatch!(record)
-          update_counters(record)
-          replace_keys(record)
-          set_inverse_instance(record)
-          @updated = true
-        else
-          decrement_counters
-          remove_keys
-        end
+      def inversed_from(record)
+        replace_keys(record)
+        super
+      end
 
-        self.target = record
+      def default(&block)
+        writer(owner.instance_exec(&block)) if reader.nil?
       end
 
       def reset
@@ -31,79 +34,83 @@ module ActiveRecord
         @updated
       end
 
-      def decrement_counters # :nodoc:
-        with_cache_name { |name| decrement_counter name }
+      def decrement_counters
+        update_counters(-1)
       end
 
-      def increment_counters # :nodoc:
-        with_cache_name { |name| increment_counter name }
+      def increment_counters
+        update_counters(1)
+      end
+
+      def decrement_counters_before_last_save
+        if reflection.polymorphic?
+          model_was = owner.attribute_before_last_save(reflection.foreign_type)&.constantize
+        else
+          model_was = klass
+        end
+
+        foreign_key_was = owner.attribute_before_last_save(reflection.foreign_key)
+
+        if foreign_key_was && model_was < ActiveRecord::Base
+          update_counters_via_scope(model_was, foreign_key_was, -1)
+        end
+      end
+
+      def target_changed?
+        owner.saved_change_to_attribute?(reflection.foreign_key)
       end
 
       private
+        def replace(record)
+          if record
+            raise_on_type_mismatch!(record)
+            set_inverse_instance(record)
+            @updated = true
+          end
+
+          replace_keys(record)
+
+          self.target = record
+        end
+
+        def update_counters(by)
+          if require_counter_update? && foreign_key_present?
+            if target && !stale_target?
+              target.increment!(reflection.counter_cache_column, by, touch: reflection.options[:touch])
+            else
+              update_counters_via_scope(klass, owner._read_attribute(reflection.foreign_key), by)
+            end
+          end
+        end
+
+        def update_counters_via_scope(klass, foreign_key, by)
+          scope = klass.unscoped.where!(primary_key(klass) => foreign_key)
+          scope.update_counters(reflection.counter_cache_column => by, touch: reflection.options[:touch])
+        end
 
         def find_target?
           !loaded? && foreign_key_present? && klass
         end
 
-        def with_cache_name
-          counter_cache_name = reflection.counter_cache_column
-          return unless counter_cache_name && owner.persisted?
-          yield counter_cache_name
-        end
-
-        def update_counters(record)
-          with_cache_name do |name|
-            return unless different_target? record
-            record.class.increment_counter(name, record.id)
-            decrement_counter name
-          end
-        end
-
-        def decrement_counter(counter_cache_name)
-          if foreign_key_present?
-            klass.decrement_counter(counter_cache_name, target_id)
-          end
-        end
-
-        def increment_counter(counter_cache_name)
-          if foreign_key_present?
-            klass.increment_counter(counter_cache_name, target_id)
-            if target && !stale_target?
-              target.increment(counter_cache_name)
-            end
-          end
-        end
-
-        # Checks whether record is different to the current target, without loading it
-        def different_target?(record)
-          record.id != owner._read_attribute(reflection.foreign_key)
+        def require_counter_update?
+          reflection.counter_cache_column && owner.persisted?
         end
 
         def replace_keys(record)
-          owner[reflection.foreign_key] = record._read_attribute(reflection.association_primary_key(record.class))
+          owner[reflection.foreign_key] = record ? record._read_attribute(primary_key(record.class)) : nil
         end
 
-        def remove_keys
-          owner[reflection.foreign_key] = nil
+        def primary_key(klass)
+          reflection.association_primary_key(klass)
         end
 
         def foreign_key_present?
           owner._read_attribute(reflection.foreign_key)
         end
 
-        # NOTE - for now, we're only supporting inverse setting from belongs_to back onto
-        # has_one associations.
         def invertible_for?(record)
           inverse = inverse_reflection_for(record)
-          inverse && inverse.has_one?
-        end
-
-        def target_id
-          if options[:primary_key]
-            owner.send(reflection.name).try(:id)
-          else
-            owner._read_attribute(reflection.foreign_key)
-          end
+          inverse && (inverse.has_one? || ActiveRecord::Base.has_many_inversing)
         end
 
         def stale_state

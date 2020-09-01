@@ -1,5 +1,4 @@
-require 'concurrent'
-require 'active_job/async_job'
+# frozen_string_literal: true
 
 ActiveJob::Base.queue_adapter = :async
-ActiveJob::AsyncJob.perform_immediately!
+ActiveJob::Base.queue_adapter.immediate = true

@@ -1,3 +1,7 @@
+# frozen_string_literal: true
+
+require "active_support/core_ext/symbol/starts_ends_with"
+
 module ActiveSupport
   # Wrapping an array in an +ArrayInquirer+ gives a friendlier way to check
   # its string-like contents:
@@ -9,8 +13,10 @@ module ActiveSupport
   #   variants.desktop?  # => false
   class ArrayInquirer < Array
     # Passes each element of +candidates+ collection to ArrayInquirer collection.
-    # The method returns true if at least one element is the same. If +candidates+
-    # collection is not given, method returns true.
+    # The method returns true if any element from the ArrayInquirer collection
+    # is equal to the stringified or symbolized form of any element in the +candidates+ collection.
+    #
+    # If +candidates+ collection is not given, method returns true.
     #
     #   variants = ActiveSupport::ArrayInquirer.new([:phone, :tablet])
     #
@@ -18,7 +24,7 @@ module ActiveSupport
     #   variants.any?(:phone, :tablet)     # => true
     #   variants.any?('phone', 'desktop')  # => true
     #   variants.any?(:desktop, :watch)    # => false
-    def any?(*candidates, &block)
+    def any?(*candidates)
       if candidates.none?
         super
       else
@@ -30,11 +36,11 @@ module ActiveSupport
 
     private
       def respond_to_missing?(name, include_private = false)
-        name[-1] == '?'
+        name.end_with?("?") || super
       end
 
       def method_missing(name, *args)
-        if name[-1] == '?'
+        if name.end_with?("?")
           any?(name[0..-2])
         else
           super

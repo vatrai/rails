@@ -1,7 +1,9 @@
-require 'active_support/ordered_options'
-require 'active_support/core_ext/object'
-require 'rails/paths'
-require 'rails/rack'
+# frozen_string_literal: true
+
+require "active_support/ordered_options"
+require "active_support/core_ext/object"
+require "rails/paths"
+require "rails/rack"
 
 module Rails
   module Configuration
@@ -28,63 +30,95 @@ module Rails
     #
     #     config.middleware.swap ActionDispatch::Flash, Magical::Unicorns
     #
+    # Middlewares can be moved from one place to another:
+    #
+    #     config.middleware.move_before ActionDispatch::Flash, Magical::Unicorns
+    #
+    # This will move the <tt>Magical::Unicorns</tt> middleware before the
+    # <tt>ActionDispatch::Flash</tt>. You can also move it after:
+    #
+    #     config.middleware.move_after ActionDispatch::Flash, Magical::Unicorns
+    #
     # And finally they can also be removed from the stack completely:
     #
     #     config.middleware.delete ActionDispatch::Flash
     #
     class MiddlewareStackProxy
-      def initialize
-        @operations = []
-        @delete_operations = []
+      def initialize(operations = [], delete_operations = [])
+        @operations = operations
+        @delete_operations = delete_operations
       end
 
       def insert_before(*args, &block)
-        @operations << [__method__, args, block]
+        @operations << -> middleware { middleware.send(__method__, *args, &block) }
       end
+      ruby2_keywords(:insert_before) if respond_to?(:ruby2_keywords, true)
 
       alias :insert :insert_before
 
       def insert_after(*args, &block)
-        @operations << [__method__, args, block]
+        @operations << -> middleware { middleware.send(__method__, *args, &block) }
       end
+      ruby2_keywords(:insert_after) if respond_to?(:ruby2_keywords, true)
 
       def swap(*args, &block)
-        @operations << [__method__, args, block]
+        @operations << -> middleware { middleware.send(__method__, *args, &block) }
       end
+      ruby2_keywords(:swap) if respond_to?(:ruby2_keywords, true)
 
       def use(*args, &block)
-        @operations << [__method__, args, block]
+        @operations << -> middleware { middleware.send(__method__, *args, &block) }
       end
+      ruby2_keywords(:use) if respond_to?(:ruby2_keywords, true)
 
       def delete(*args, &block)
-        @delete_operations << [__method__, args, block]
+        @delete_operations << -> middleware { middleware.send(__method__, *args, &block) }
+      end
+
+      def move_before(*args, &block)
+        @delete_operations << -> middleware { middleware.send(__method__, *args, &block) }
+      end
+
+      alias :move :move_before
+
+      def move_after(*args, &block)
+        @delete_operations << -> middleware { middleware.send(__method__, *args, &block) }
       end
 
       def unshift(*args, &block)
-        @operations << [__method__, args, block]
+        @operations << -> middleware { middleware.send(__method__, *args, &block) }
       end
+      ruby2_keywords(:unshift) if respond_to?(:ruby2_keywords, true)
 
       def merge_into(other) #:nodoc:
-        (@operations + @delete_operations).each do |operation, args, block|
-          other.send(operation, *args, &block)
+        (@operations + @delete_operations).each do |operation|
+          operation.call(other)
         end
 
         other
       end
+
+      def +(other) # :nodoc:
+        MiddlewareStackProxy.new(@operations + other.operations, @delete_operations + other.delete_operations)
+      end
+
+      protected
+        attr_reader :operations, :delete_operations
     end
 
     class Generators #:nodoc:
       attr_accessor :aliases, :options, :templates, :fallbacks, :colorize_logging, :api_only
-      attr_reader :hidden_namespaces
+      attr_reader :hidden_namespaces, :after_generate_callbacks
 
       def initialize
-        @aliases = Hash.new { |h,k| h[k] = {} }
-        @options = Hash.new { |h,k| h[k] = {} }
+        @aliases = Hash.new { |h, k| h[k] = {} }
+        @options = Hash.new { |h, k| h[k] = {} }
         @fallbacks = {}
         @templates = []
         @colorize_logging = true
         @api_only = false
         @hidden_namespaces = []
+        @after_generate_callbacks = []
       end
 
       def initialize_copy(source)
@@ -98,10 +132,20 @@ module Rails
         @hidden_namespaces << namespace
       end
 
-      def method_missing(method, *args)
-        method = method.to_s.sub(/=$/, '').to_sym
+      def after_generate(&block)
+        @after_generate_callbacks << block
+      end
 
-        return @options[method] if args.empty?
+      def method_missing(method, *args)
+        method = method.to_s.delete_suffix("=").to_sym
+
+        if args.empty?
+          if method == :rails
+            return @options[method]
+          else
+            return @options[:rails][method]
+          end
+        end
 
         if method == :rails || args.first.is_a?(Hash)
           namespace, configuration = method, args.shift

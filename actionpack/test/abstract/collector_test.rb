@@ -1,4 +1,6 @@
-require 'abstract_unit'
+# frozen_string_literal: true
+
+require "abstract_unit"
 
 module AbstractController
   module Testing
@@ -28,7 +30,7 @@ module AbstractController
       end
 
       test "register mime types on method missing" do
-        AbstractController::Collector.send(:remove_method, :js)
+        AbstractController::Collector.remove_method :js
         begin
           collector = MyCollector.new
           assert_not_respond_to collector, :js
@@ -53,9 +55,9 @@ module AbstractController
         collector.html
         collector.text(:foo)
         collector.js(:bar) { :baz }
-        assert_equal [Mime::Type[:HTML], [], nil], collector.responses[0]
-        assert_equal [Mime::Type[:TEXT], [:foo], nil], collector.responses[1]
-        assert_equal [Mime::Type[:JS], [:bar]], collector.responses[2][0,2]
+        assert_equal [Mime[:html], [], nil], collector.responses[0]
+        assert_equal [Mime[:text], [:foo], nil], collector.responses[1]
+        assert_equal [Mime[:js], [:bar]], collector.responses[2][0, 2]
         assert_equal :baz, collector.responses[2][2].call
       end
     end

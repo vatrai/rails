@@ -1,15 +1,11 @@
+# frozen_string_literal: true
+
+require "rails/command"
+require "active_support/deprecation"
+
 namespace :dev do
-  task :cache do
-    desc 'Toggle development mode caching on/off'
-
-    if File.exist? 'tmp/caching-dev.txt'
-      File.delete 'tmp/caching-dev.txt'
-      puts 'Development mode is no longer being cached.'
-    else
-      FileUtils.touch 'tmp/caching-dev.txt'
-      puts 'Development mode is now being cached.'
-    end
-
-    FileUtils.touch 'tmp/restart.txt'
+  task cache: :environment do
+    ActiveSupport::Deprecation.warn("Using `bin/rake dev:cache` is deprecated and will be removed in Rails 6.1. Use `bin/rails dev:cache` instead.\n")
+    Rails::Command.invoke "dev:cache"
   end
 end

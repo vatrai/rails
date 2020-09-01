@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "isolation/abstract_unit"
 
 module ApplicationTests
@@ -6,7 +8,6 @@ module ApplicationTests
 
     def setup
       build_app
-      boot_rails
       FileUtils.rm_rf "#{app_path}/config/environments"
     end
 
@@ -32,7 +33,7 @@ module ApplicationTests
       RUBY
 
       require "#{app_path}/config/environment"
-      assert_equal [1,2,3], $initialization_callbacks
+      assert_equal [1, 2, 3], $initialization_callbacks
     end
 
     test "hooks block works correctly with eager_load" do
@@ -47,18 +48,17 @@ module ApplicationTests
       RUBY
 
       require "#{app_path}/config/environment"
-      assert_equal [1,2,3,4], $initialization_callbacks
+      assert_equal [1, 2, 3, 4], $initialization_callbacks
     end
 
     test "after_initialize runs after frameworks have been initialized" do
-      $activerecord_configurations = nil
+      $activerecord_configuration = nil
       add_to_config <<-RUBY
-        config.after_initialize { $activerecord_configurations = ActiveRecord::Base.configurations }
+        config.after_initialize { $activerecord_configuration = ActiveRecord::Base.configurations.configs_for(env_name: "development", name: "primary") }
       RUBY
 
       require "#{app_path}/config/environment"
-      assert $activerecord_configurations
-      assert $activerecord_configurations['development']
+      assert $activerecord_configuration
     end
 
     test "after_initialize happens after to_prepare in development" do

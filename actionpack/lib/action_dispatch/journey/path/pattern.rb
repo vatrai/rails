@@ -1,18 +1,10 @@
+# frozen_string_literal: true
+
 module ActionDispatch
   module Journey # :nodoc:
     module Path # :nodoc:
       class Pattern # :nodoc:
         attr_reader :spec, :requirements, :anchored
-
-        def self.from_string string
-          build(string, {}, "/.?", true)
-        end
-
-        def self.build(path, requirements, separators, anchored)
-          parser = Journey::Parser.new
-          ast = parser.parse path
-          new ast, requirements, separators, anchored
-        end
 
         def initialize(ast, requirements, separators, anchored)
           @spec         = ast
@@ -31,22 +23,24 @@ module ActionDispatch
           Visitors::FormatBuilder.new.accept(spec)
         end
 
+        def eager_load!
+          required_names
+          offsets
+          to_regexp
+          nil
+        end
+
         def ast
           @spec.find_all(&:symbol?).each do |node|
             re = @requirements[node.to_sym]
             node.regexp = re if re
           end
 
-          @spec.find_all(&:star?).each do |node|
-            node = node.left
-            node.regexp = @requirements[node.to_sym] || /(.+)/
-          end
-
           @spec
         end
 
         def names
-          @names ||= spec.grep(Nodes::Symbol).map(&:name)
+          @names ||= spec.find_all(&:symbol?).map(&:name)
         end
 
         def required_names
@@ -54,8 +48,8 @@ module ActionDispatch
         end
 
         def optional_names
-          @optional_names ||= spec.grep(Nodes::Group).flat_map { |group|
-            group.grep(Nodes::Symbol)
+          @optional_names ||= spec.find_all(&:group?).flat_map { |group|
+            group.find_all(&:symbol?)
           }.map(&:name).uniq
         end
 
@@ -72,7 +66,7 @@ module ActionDispatch
           end
 
           def visit_CAT(node)
-            [visit(node.left), visit(node.right)].join
+            "#{visit(node.left)}#{visit(node.right)}"
           end
 
           def visit_SYMBOL(node)
@@ -81,7 +75,7 @@ module ActionDispatch
             return @separator_re unless @matchers.key?(node)
 
             re = @matchers[node]
-            "(#{re})"
+            "(#{Regexp.union(re)})"
           end
 
           def visit_GROUP(node)
@@ -98,8 +92,8 @@ module ActionDispatch
           end
 
           def visit_STAR(node)
-            re = @matchers[node.left.to_sym] || '.+'
-            "(#{re})"
+            re = @matchers[node.left.to_sym]
+            re ? "(#{re})" : "(.+)"
           end
 
           def visit_OR(node)
@@ -110,7 +104,8 @@ module ActionDispatch
 
         class UnanchoredRegexp < AnchoredRegexp # :nodoc:
           def accept(node)
-            %r{\A#{visit node}}
+            path = visit node
+            path == "/" ? %r{\A/} : %r{\A#{path}(?:\b|\Z|/)}
           end
         end
 
@@ -124,7 +119,11 @@ module ActionDispatch
           end
 
           def captures
-            (length - 1).times.map { |i| self[i + 1] }
+            Array.new(length - 1) { |i| self[i + 1] }
+          end
+
+          def named_captures
+            @names.zip(captures).to_h
           end
 
           def [](x)
@@ -151,6 +150,10 @@ module ActionDispatch
         end
         alias :=~ :match
 
+        def match?(other)
+          to_regexp.match?(other)
+        end
+
         def source
           to_regexp.source
         end
@@ -159,8 +162,13 @@ module ActionDispatch
           @re ||= regexp_visitor.new(@separators, @requirements).accept spec
         end
 
-        private
+        def requirements_for_missing_keys_check
+          @requirements_for_missing_keys_check ||= requirements.transform_values do |regex|
+            /\A#{regex}\Z/
+          end
+        end
 
+        private
           def regexp_visitor
             @anchored ? AnchoredRegexp : UnanchoredRegexp
           end
@@ -174,8 +182,8 @@ module ActionDispatch
               node = node.to_sym
 
               if @requirements.key?(node)
-                re = /#{@requirements[node]}|/
-                @offsets.push((re.match('').length - 1) + @offsets.last)
+                re = /#{Regexp.union(@requirements[node])}|/
+                @offsets.push((re.match("").length - 1) + @offsets.last)
               else
                 @offsets << @offsets.last
               end

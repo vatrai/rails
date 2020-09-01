@@ -1,4 +1,7 @@
-require 'rails/configuration'
+# frozen_string_literal: true
+
+require "rails/configuration"
+require "active_support/core_ext/symbol/starts_ends_with"
 
 module Rails
   class Railtie
@@ -53,7 +56,7 @@ module Rails
         ActiveSupport.on_load(:before_configuration, yield: true, &block)
       end
 
-      # Third configurable block to run. Does not run if +config.cache_classes+
+      # Third configurable block to run. Does not run if +config.eager_load+
       # set to false.
       def before_eager_load(&block)
         ActiveSupport.on_load(:before_eager_load, yield: true, &block)
@@ -85,10 +88,9 @@ module Rails
       end
 
     private
-
       def method_missing(name, *args, &blk)
-        if name.to_s =~ /=$/
-          @@options[$`.to_sym] = args.first
+        if name.end_with?("=")
+          @@options[:"#{name[0..-2]}"] = args.first
         elsif @@options.key?(name)
           @@options[name]
         else

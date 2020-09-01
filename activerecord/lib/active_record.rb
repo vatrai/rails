@@ -1,5 +1,7 @@
+# frozen_string_literal: true
+
 #--
-# Copyright (c) 2004-2015 David Heinemeier Hansson
+# Copyright (c) 2004-2020 David Heinemeier Hansson
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -21,31 +23,33 @@
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #++
 
-require 'active_support'
-require 'active_support/rails'
-require 'active_model'
-require 'arel'
+require "active_support"
+require "active_support/rails"
+require "active_model"
+require "arel"
+require "yaml"
 
-require 'active_record/version'
-require 'active_record/attribute_set'
+require "active_record/version"
+require "active_model/attribute_set"
+require "active_record/errors"
 
 module ActiveRecord
   extend ActiveSupport::Autoload
 
-  autoload :Attribute
   autoload :Base
   autoload :Callbacks
   autoload :Core
   autoload :ConnectionHandling
   autoload :CounterCache
   autoload :DynamicMatchers
+  autoload :DelegatedType
   autoload :Enum
+  autoload :InternalMetadata
   autoload :Explain
   autoload :Inheritance
   autoload :Integration
-  autoload :LegacyYamlAdapter
   autoload :Migration
-  autoload :Migrator, 'active_record/migration'
+  autoload :Migrator, "active_record/migration"
   autoload :ModelSchema
   autoload :NestedAttributes
   autoload :NoTouching
@@ -53,9 +57,8 @@ module ActiveRecord
   autoload :Persistence
   autoload :QueryCache
   autoload :Querying
-  autoload :CollectionCacheKey
   autoload :ReadonlyAttributes
-  autoload :RecordInvalid, 'active_record/validations'
+  autoload :RecordInvalid, "active_record/validations"
   autoload :Reflection
   autoload :RuntimeRegistry
   autoload :Sanitization
@@ -66,8 +69,8 @@ module ActiveRecord
   autoload :Serialization
   autoload :StatementCache
   autoload :Store
+  autoload :SignedId
   autoload :Suppressor
-  autoload :TableMetadata
   autoload :Timestamp
   autoload :Transactions
   autoload :Translation
@@ -75,9 +78,7 @@ module ActiveRecord
   autoload :SecureToken
 
   eager_autoload do
-    autoload :ActiveRecordError, 'active_record/errors'
-    autoload :ConnectionNotEstablished, 'active_record/errors'
-    autoload :ConnectionAdapters, 'active_record/connection_adapters/abstract_adapter'
+    autoload :ConnectionAdapters
 
     autoload :Aggregations
     autoload :Associations
@@ -85,11 +86,13 @@ module ActiveRecord
     autoload :AttributeMethods
     autoload :AutosaveAssociation
 
+    autoload :LegacyYamlAdapter
+
     autoload :Relation
     autoload :AssociationRelation
     autoload :NullRelation
 
-    autoload_under 'relation' do
+    autoload_under "relation" do
       autoload :QueryMethods
       autoload :FinderMethods
       autoload :Calculations
@@ -100,11 +103,13 @@ module ActiveRecord
     end
 
     autoload :Result
+    autoload :TableMetadata
+    autoload :Type
   end
 
   module Coders
-    autoload :YAMLColumn, 'active_record/coders/yaml_column'
-    autoload :JSON, 'active_record/coders/json'
+    autoload :YAMLColumn, "active_record/coders/yaml_column"
+    autoload :JSON, "active_record/coders/json"
   end
 
   module AttributeMethods
@@ -131,15 +136,6 @@ module ActiveRecord
     end
   end
 
-  module ConnectionAdapters
-    extend ActiveSupport::Autoload
-
-    eager_autoload do
-      autoload :AbstractAdapter
-      autoload :ConnectionManagement, "active_record/connection_adapters/abstract/connection_pool"
-    end
-  end
-
   module Scoping
     extend ActiveSupport::Autoload
 
@@ -149,17 +145,24 @@ module ActiveRecord
     end
   end
 
+  module Middleware
+    extend ActiveSupport::Autoload
+
+    autoload :DatabaseSelector, "active_record/middleware/database_selector"
+  end
+
   module Tasks
     extend ActiveSupport::Autoload
 
     autoload :DatabaseTasks
-    autoload :SQLiteDatabaseTasks, 'active_record/tasks/sqlite_database_tasks'
-    autoload :MySQLDatabaseTasks,  'active_record/tasks/mysql_database_tasks'
+    autoload :SQLiteDatabaseTasks, "active_record/tasks/sqlite_database_tasks"
+    autoload :MySQLDatabaseTasks,  "active_record/tasks/mysql_database_tasks"
     autoload :PostgreSQLDatabaseTasks,
-      'active_record/tasks/postgresql_database_tasks'
+      "active_record/tasks/postgresql_database_tasks"
   end
 
-  autoload :TestFixtures, 'active_record/fixtures'
+  autoload :TestDatabases, "active_record/test_databases"
+  autoload :TestFixtures, "active_record/fixtures"
 
   def self.eager_load!
     super
@@ -176,5 +179,10 @@ ActiveSupport.on_load(:active_record) do
 end
 
 ActiveSupport.on_load(:i18n) do
-  I18n.load_path << File.dirname(__FILE__) + '/active_record/locale/en.yml'
+  I18n.load_path << File.expand_path("active_record/locale/en.yml", __dir__)
 end
+
+YAML.load_tags["!ruby/object:ActiveRecord::AttributeSet"] = "ActiveModel::AttributeSet"
+YAML.load_tags["!ruby/object:ActiveRecord::Attribute::FromDatabase"] = "ActiveModel::Attribute::FromDatabase"
+YAML.load_tags["!ruby/object:ActiveRecord::LazyAttributeHash"] = "ActiveModel::LazyAttributeHash"
+YAML.load_tags["!ruby/object:ActiveRecord::ConnectionAdapters::AbstractMysqlAdapter::MysqlString"] = "ActiveRecord::Type::String"

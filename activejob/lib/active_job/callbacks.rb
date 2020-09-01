@@ -1,10 +1,14 @@
-require 'active_support/callbacks'
+# frozen_string_literal: true
+
+require "active_support/callbacks"
+require "active_support/core_ext/object/with_options"
+require "active_support/core_ext/module/attribute_accessors"
 
 module ActiveJob
   # = Active Job Callbacks
   #
   # Active Job provides hooks during the life cycle of a job. Callbacks allow you
-  # to trigger logic during the life cycle of a job. Available callbacks are:
+  # to trigger logic during this cycle. Available callbacks are:
   #
   # * <tt>before_enqueue</tt>
   # * <tt>around_enqueue</tt>
@@ -13,18 +17,36 @@ module ActiveJob
   # * <tt>around_perform</tt>
   # * <tt>after_perform</tt>
   #
+  # NOTE: Calling the same callback multiple times will overwrite previous callback definitions.
+  #
   module Callbacks
     extend  ActiveSupport::Concern
     include ActiveSupport::Callbacks
 
+    class << self
+      include ActiveSupport::Callbacks
+      define_callbacks :execute
+    end
+
     included do
-      define_callbacks :perform
-      define_callbacks :enqueue
+      class_attribute :return_false_on_aborted_enqueue, instance_accessor: false, instance_predicate: false, default: false
+      cattr_accessor :skip_after_callbacks_if_terminated, instance_accessor: false, default: false
+
+      with_options(skip_after_callbacks_if_terminated: skip_after_callbacks_if_terminated) do
+        define_callbacks :perform
+        define_callbacks :enqueue
+      end
     end
 
     # These methods will be included into any Active Job object, adding
     # callbacks for +perform+ and +enqueue+ methods.
     module ClassMethods
+      def inherited(klass)
+        klass.get_callbacks(:enqueue).config[:skip_after_callbacks_if_terminated] = skip_after_callbacks_if_terminated
+        klass.get_callbacks(:perform).config[:skip_after_callbacks_if_terminated] = skip_after_callbacks_if_terminated
+        super
+      end
+
       # Defines a callback that will get called right before the
       # job's perform method is executed.
       #
@@ -79,6 +101,19 @@ module ActiveJob
       #     end
       #   end
       #
+      # You can access the return value of the job only if the execution wasn't halted.
+      #
+      #   class VideoProcessJob < ActiveJob::Base
+      #     around_perform do |job, block|
+      #       value = block.call
+      #       puts value # => "Hello World!"
+      #     end
+      #
+      #     def perform
+      #       "Hello World!"
+      #     end
+      #   end
+      #
       def around_perform(*filters, &blk)
         set_callback(:perform, :around, *filters, &blk)
       end
@@ -121,8 +156,8 @@ module ActiveJob
         set_callback(:enqueue, :after, *filters, &blk)
       end
 
-      # Defines a callback that will get called before and after the
-      # job is enqueued.
+      # Defines a callback that will get called around the enqueuing
+      # of the job.
       #
       #   class VideoProcessJob < ActiveJob::Base
       #     queue_as :default
@@ -142,5 +177,21 @@ module ActiveJob
         set_callback(:enqueue, :around, *filters, &blk)
       end
     end
+
+    private
+      def halted_callback_hook(_filter, name) # :nodoc:
+        return super unless %i(enqueue perform).include?(name.to_sym)
+        callbacks = public_send("_#{name}_callbacks")
+
+        if !self.class.skip_after_callbacks_if_terminated && callbacks.any? { |c| c.kind == :after }
+          ActiveSupport::Deprecation.warn(<<~EOM)
+            In Rails 6.2, `after_enqueue`/`after_perform` callbacks no longer run if `before_enqueue`/`before_perform` respectively halts with `throw :abort`.
+            To enable this behavior, uncomment the `config.active_job.skip_after_callbacks_if_terminated` config
+            in the new 6.1 framework defaults initializer.
+          EOM
+        end
+
+        super
+      end
   end
 end

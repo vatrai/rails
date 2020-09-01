@@ -1,8 +1,9 @@
+# frozen_string_literal: true
+
 module ActiveRecord
   module Validations
     class PresenceValidator < ActiveModel::Validations::PresenceValidator # :nodoc:
       def validate_each(record, attribute, association_or_value)
-        return unless should_validate?(record)
         if record.class._reflect_on_association(attribute)
           association_or_value = Array.wrap(association_or_value).reject(&:marked_for_destruction?)
         end
@@ -31,7 +32,7 @@ module ActiveRecord
       # This is due to the way Object#blank? handles boolean values:
       # <tt>false.blank? # => true</tt>.
       #
-      # This validator defers to the ActiveModel validation for presence, adding the
+      # This validator defers to the Active Model validation for presence, adding the
       # check to see that an associated object is not marked for destruction. This
       # prevents the parent object from validating successfully and saving, which then
       # deletes the associated object, thus putting the parent object into an invalid
@@ -39,12 +40,13 @@ module ActiveRecord
       #
       # NOTE: This validation will not fail while using it with an association
       # if the latter was assigned but not valid. If you want to ensure that
-      # it is both present and valid, you also need to use +validates_associated+.
+      # it is both present and valid, you also need to use
+      # {validates_associated}[rdoc-ref:Validations::ClassMethods#validates_associated].
       #
       # Configuration options:
       # * <tt>:message</tt> - A custom error message (default is: "can't be blank").
       # * <tt>:on</tt> - Specifies the contexts where this validation is active.
-      #   Runs in all validation contexts by default (nil). You can pass a symbol
+      #   Runs in all validation contexts by default +nil+. You can pass a symbol
       #   or an array of symbols. (e.g. <tt>on: :create</tt> or
       #   <tt>on: :custom_validation_context</tt> or
       #   <tt>on: [:create, :custom_validation_context]</tt>)
@@ -57,7 +59,7 @@ module ActiveRecord
       #   or <tt>unless: Proc.new { |user| user.signup_step <= 2 }</tt>). The method,
       #   proc or string should return or evaluate to a +true+ or +false+ value.
       # * <tt>:strict</tt> - Specifies whether validation should be strict.
-      #   See <tt>ActiveModel::Validation#validates!</tt> for more information.
+      #   See ActiveModel::Validations#validates! for more information.
       def validates_presence_of(*attr_names)
         validates_with PresenceValidator, _merge_attributes(attr_names)
       end

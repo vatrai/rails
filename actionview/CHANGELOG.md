@@ -1,206 +1,114 @@
-*   Add a `hidden_field` on the `collection_radio_buttons` to avoid raising a error
-    when the only input on the form is the `collection_radio_buttons`.
+*   `ActionView::Helpers::TranslationHelper#translate` accepts a block, yielding
+    the translated text and the fully resolved translation key:
 
-    *Mauro George*
+        <%= translate(".relative_key") do |translation, resolved_key| %>
+          <span title="<%= resolved_key %>"><%= translation %></span>
+        <% end %>
 
-*   `url_for` does not modify its arguments when generating polymorphic URLs.
+    *Sean Doyle*
 
-    *Bernerd Schaefer*
+*   Ensure cache fragment digests include all relevant template dependencies when
+    fragments are contained in a block passed to the render helper. Remove the
+    virtual_path keyword arguments found in CacheHelper as they no longer possess
+    any function following 1581cab.
 
-*   `number_to_currency` and `number_with_delimiter` now accept custom `delimiter_pattern` option 
-     to handle placement of delimiter, to support currency formats like INR 
-     
-     Example: 
-        
-        number_to_currency(1230000, delimiter_pattern: /(\d+?)(?=(\d\d)+(\d)(?!\d))/, unit: '₹', format: "%u %n")
-        # => '₹ 12,30,000.00' 
-        
-    *Vipul A M*
-    
-*   Make `disable_with` the default behavior for submit tags. Disables the
-    button on submit to prevent double submits.
+    Fixes #38984.
 
-    *Justin Schiff*
+    *Aaron Lipman*
 
-*   Add a break_sequence option to word_wrap so you can specify a custom break.
+*   Deprecate `config.action_view.raise_on_missing_translations` in favor of
+    `config.i18n.raise_on_missing_translations`.
 
-    * Mauricio Gomez *
+    New generalized configuration option now determines whether an error should be raised
+    for missing translations in controllers and views.
 
-*   Add wildcard matching to explicit dependencies.
+    *fatkodima*
 
-    Turns:
+*   Instrument layout rendering in `TemplateRenderer#render_with_layout` as `render_layout.action_view`,
+    and include (when necessary) the layout's virtual path in notification payloads for collection and partial renders.
 
-    ```erb
-    <% # Template Dependency: recordings/threads/events/subscribers_changed %>
-    <% # Template Dependency: recordings/threads/events/completed %>
-    <% # Template Dependency: recordings/threads/events/uncompleted %>
-    ```
+    *Zach Kemp*
 
-    Into:
+*   `ActionView::Base.annotate_rendered_view_with_filenames` annotates HTML output with template file names.
 
-    ```erb
-    <% # Template Dependency: recordings/threads/events/* %>
-    ```
+    *Joel Hawksley*, *Aaron Patterson*
 
-    *Kasper Timm Hansen*
+*   `ActionView::Helpers::TranslationHelper#translate` returns nil when
+    passed `default: nil` without a translation matching `I18n#translate`.
 
-*   Allow defining explicit collection caching using a `# Template Collection: ...`
-    directive inside templates.
+    *Stefan Wrobel*
 
-    *Dov Murik*
+*   `OptimizedFileSystemResolver` prefers template details in order of locale,
+    formats, variants, handlers.
 
-*   Asset helpers raise `ArgumentError` when `nil` is passed as a source.
+    *Iago Pimenta*
 
-    *Anton Kolomiychuk*
+*   Added `class_names` helper to create a CSS class value with conditional classes.
 
-*   Always attach the template digest to the cache key for collection caching
-    even when `virtual_path` is not available from the view context.
-    Which could happen if the rendering was done directly in the controller
-    and not in a template.
+    *Joel Hawksley*, *Aaron Patterson*
 
-    Fixes #20535
+*   Add support for conditional values to TagBuilder.
 
-    *Roque Pinel*
+    *Joel Hawksley*
 
-*   Improve detection of partial templates eligible for collection caching,
-    now allowing multi-line comments at the beginning of the template file.
-
-    *Dov Murik*
-
-*   Raise an ArgumentError when a false value for `include_blank` is passed to a
-    required select field (to comply with the HTML5 spec).
-
-    *Grey Baker*
-
-*   Do not put partial name to `local_assigns` when rendering without
-    an object or a collection.
-
-    *Henrik Nygren*
-
-*   Remove `:rescue_format` option for `translate` helper since it's no longer
-    supported by I18n.
-
-    *Bernard Potocki*
-
-*   `translate` should handle `raise` flag correctly in case of both main and default
-    translation is missing.
-
-    Fixes #19967
-
-    *Bernard Potocki*
-
-*   Load the `default_form_builder` from the controller on initialization, which overrides
-    the global config if it is present.
-
-    *Kevin McPhillips*
-
-*   Accept lambda as `child_index` option in `fields_for` method.
-
-    *Karol Galanciak*
-
-*   `translate` allows `default: [[]]` again for a default value of `[]`.
-
-    Fixes #19640.
-
-    *Adam Prescott*
-
-*   `translate` should accept nils as members of the `:default`
-    parameter without raising a translation missing error.
-
-    Fixes #19419
-
-    *Justin Coyne*
-
-*   `number_to_percentage` does not crash with `Float::NAN` or `Float::INFINITY`
-    as input when `precision: 0` is used.
-
-    Fixes #19227.
-
-    *Yves Senn*
-
-*   Fixed the translation helper method to accept different default values types
-    besides String.
-
-    *Ulisses Almeida*
-
-*   Collection rendering automatically caches and fetches multiple partials.
-
-    Collections rendered as:
+*   `ActionView::Helpers::FormOptionsHelper#select` should mark option for `nil` as selected.
 
     ```ruby
-    <%= render @notifications %>
-    <%= render partial: 'notifications/notification', collection: @notifications, as: :notification %>
+    @post = Post.new
+    @post.category = nil
+
+    # Before
+    select("post", "category", none: nil, programming: 1, economics: 2)
+    # =>
+    # <select name="post[category]" id="post_category">
+    #   <option value="">none</option>
+    #  <option value="1">programming</option>
+    #  <option value="2">economics</option>
+    # </select>
+
+    # After
+    select("post", "category", none: nil, programming: 1, economics: 2)
+    # =>
+    # <select name="post[category]" id="post_category">
+    #   <option selected="selected" value="">none</option>
+    #  <option value="1">programming</option>
+    #  <option value="2">economics</option>
+    # </select>
     ```
 
-    will now read several partials from cache at once, if the template starts with a cache call:
+    *bogdanvlviv*
 
-    ```ruby
-    # notifications/_notification.html.erb
-    <% cache notification do %>
-      <%# ... %>
-    <% end %>
-    ```
+*   Log lines for partial renders and started template renders are now
+    emitted at the `DEBUG` level instead of `INFO`.
 
-    *Kasper Timm Hansen*
+    Completed template renders are still logged at the `INFO` level.
 
-*   Fixed a dependency tracker bug that caused template dependencies not
-    count layouts as dependencies for partials.
+    *DHH*
 
-    *Juho Leinonen*
+*   ActionView::Helpers::SanitizeHelper: support rails-html-sanitizer 1.1.0.
 
-*   Extracted `ActionView::Helpers::RecordTagHelper` to external gem
-    (`record_tag_helper`) and added removal notices.
+    *Juanito Fatas*
 
-    *Todd Bealmear*
+*   Added `phone_to` helper method to create a link from mobile numbers.
 
-*   Allow to pass a string value to `size` option in `image_tag` and `video_tag`.
+    *Pietro Moro*
 
-    This makes the behavior more consistent with `width` or `height` options.
+*   annotated_source_code returns an empty array so TemplateErrors without a
+    template in the backtrace are surfaced properly by DebugExceptions.
 
-    *Mehdi Lahmam*
+    *Guilherme Mansur*, *Kasper Timm Hansen*
 
-*   Partial template name does no more have to be a valid Ruby identifier.
+*   Add autoload for SyntaxErrorInTemplate so syntax errors are correctly raised by DebugExceptions.
 
-    There used to be a naming rule that the partial name should start with
-    underscore, and should be followed by any combination of letters, numbers
-    and underscores.
-    But now we can give our partials any name starting with underscore, such as
-    _🍔.html.erb.
+    *Guilherme Mansur*, *Gannon McGibbon*
 
-    *Akira Matsuda*
+*   `RenderingHelper` supports rendering objects that `respond_to?` `:render_in`.
 
-*   Change the default template handler from `ERB` to `Raw`.
+    *Joel Hawksley*, *Natasha Umer*, *Aaron Patterson*, *Shawn Allen*, *Emily Plummer*, *Diana Mounter*, *John Hawthorn*, *Nathan Herald*, *Zaid Zawaideh*, *Zach Ahn*
 
-    Files without a template handler in their extension will be rendered using the raw
-    handler instead of ERB.
+*   Fix `select_tag` so that it doesn't change `options` when `include_blank` is present.
 
-    *Rafael Mendonça França*
+    *Younes SERRAJ*
 
-*   Remove deprecated `AbstractController::Base::parent_prefixes`.
 
-    *Rafael Mendonça França*
-
-*   Default translations that have a lower precedence than a html safe default,
-    but are not themselves safe, should not be marked as html_safe.
-
-    *Justin Coyne*
-
-*   Make possible to use blocks with short version of `render "partial"` helper.
-
-    *Nikolay Shebanov*
-
-*   Add a `hidden_field` on the `file_field` to avoid raise a error when the only
-    input on the form is the `file_field`.
-
-    *Mauro George*
-
-*   Add an explicit error message, in `ActionView::PartialRenderer` for partial
-    `rendering`, when the value of option `as` has invalid characters.
-
-    *Angelo Capilleri*
-
-*   Allow entries without a link tag in `AtomFeedHelper`.
-
-    *Daniel Gomez de Souza*
-
-Please check [4-2-stable](https://github.com/rails/rails/blob/4-2-stable/actionview/CHANGELOG.md) for previous changes.
+Please check [6-0-stable](https://github.com/rails/rails/blob/6-0-stable/actionview/CHANGELOG.md) for previous changes.

@@ -1,4 +1,6 @@
-require 'abstract_unit'
+# frozen_string_literal: true
+
+require "abstract_unit"
 
 module ContentType
   class BaseController < ActionController::Base
@@ -7,12 +9,12 @@ module ContentType
     end
 
     def set_on_response_obj
-      response.content_type = Mime::Type[:RSS]
+      response.content_type = Mime[:rss]
       render body: "Hello world!"
     end
 
     def set_on_render
-      render body: "Hello world!", content_type: Mime::Type[:RSS]
+      render body: "Hello world!", content_type: Mime[:rss]
     end
   end
 
@@ -43,7 +45,9 @@ module ContentType
     test "default response is text/plain and UTF8" do
       with_routing do |set|
         set.draw do
-          get ':controller', :action => 'index'
+          ActiveSupport::Deprecation.silence do
+            get ":controller", action: "index"
+          end
         end
 
         get "/content_type/base"

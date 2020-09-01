@@ -1,363 +1,391 @@
-*   `assert_difference` and `assert_no_difference` now returns the result of the
-    yielded block.
+*   Add `ActiveSupport::Duration` conversion methods
 
-    Example:
+    `in_seconds`, `in_minutes`, `in_hours`, `in_days`, `in_weeks`, `in_months`, and `in_years` return the respective duration covered.
 
-      post = assert_difference -> { Post.count }, 1 do
-        Post.create
-      end
+    *Jason York*
 
-    *Lucas Mazza*
+*   Fixed issue in `ActiveSupport::Cache::RedisCacheStore` not passing options
+    to `read_multi` causing `fetch_multi` to not work properly
 
-*   Short-circuit `blank?` on date and time values since they are never blank.
+    *Rajesh Sharma*
 
-    Fixes #21657
+*   Fixed issue in `ActiveSupport::Cache::MemCacheStore` which caused duplicate compression,
+    and caused the provided `compression_threshold` to not be respected.
 
-    *Andrew White*
+    *Max Gurewitz*
 
-*   Replaced deprecated `ThreadSafe::Cache` with its successor `Concurrent::Map` now that
-    the thread_safe gem has been merged into concurrent-ruby.
+*   Prevent `RedisCacheStore` and `MemCacheStore` from performing compression
+    when reading entries written with `raw: true`.
 
-    *Jerry D'Antonio*
+    *Max Gurewitz*
 
-*   Updated Unicode version to 8.0.0
-
-    *Anshul Sharma*
-
-*   `number_to_currency` and `number_with_delimiter` now accept custom `delimiter_pattern` option
-     to handle placement of delimiter, to support currency formats like INR
-
-     Example:
-
-        number_to_currency(1230000, delimiter_pattern: /(\d+?)(?=(\d\d)+(\d)(?!\d))/, unit: '₹', format: "%u %n")
-        # => '₹ 12,30,000.00'
-
-    *Vipul A M*
-
-*   Deprecate `:prefix` option of `number_to_human_size` with no replacement.
+*   `URI.parser` is deprecated and will be removed in Rails 6.2. Use
+    `URI::DEFAULT_PARSER` instead.
 
     *Jean Boussier*
 
-*   Fix `TimeWithZone#eql?` to properly handle `TimeWithZone` created from `DateTime`:
-        twz = DateTime.now.in_time_zone
-        twz.eql?(twz.dup) => true
+*   `require_dependency` has been documented to be _obsolete_ in `:zeitwerk`
+    mode. The method is not deprecated as such (yet), but applications are
+    encouraged to not use it.
 
-    Fixes #14178.
+    In `:zeitwerk` mode, semantics match Ruby's and you do not need to be
+    defensive with load order. Just refer to classes and modules normally. If
+    the constant name is dynamic, camelize if needed, and constantize.
 
-    *Roque Pinel*
+    *Xavier Noria*
 
-*   ActiveSupport::HashWithIndifferentAccess `select` and `reject` will now return
-    enumerator if called without block.
+*   Add 3rd person aliases of `Symbol#start_with?` and `Symbol#end_with?`.
 
-    Fixes #20095
+    ```ruby
+    :foo.starts_with?("f") # => true
+    :foo.ends_with?("o")   # => true
+    ```
 
-    *Bernard Potocki*
+    *Ryuta Kamizono*
 
-*   Removed `ActiveSupport::Concurrency::Latch`, superseded by `Concurrent::CountDownLatch`
-    from the concurrent-ruby gem.
+*   Add override of unary plus for `ActiveSupport::Duration`.
 
-    *Jerry D'Antonio*
+    `+ 1.second` is now identical to `+1.second` to prevent errors
+    where a seemingly innocent change of formatting leads to a change in the code behavior.
 
-*   Fix not calling `#default` on `HashWithIndifferentAccess#to_hash` when only
-    `default_proc` is set, which could raise.
+    Before:
+    ```ruby
+    +1.second.class
+    # => ActiveSupport::Duration
+    (+ 1.second).class
+    # => Integer
+    ```
 
-    *Simon Eskildsen*
+    After:
+    ```ruby
+    +1.second.class
+    # => ActiveSupport::Duration
+    (+ 1.second).class
+    # => ActiveSupport::Duration
+    ```
 
-*   Fix setting `default_proc` on `HashWithIndifferentAccess#dup`
+    Fixes #39079.
 
-    *Simon Eskildsen*
+    *Roman Kushnir*
 
-*   Fix a range of values for parameters of the Time#change
-
-    *Nikolay Kondratyev*
-
-*   Add `Enumerable#pluck` to get the same values from arrays as from ActiveRecord
-    associations.
-
-    Fixes #20339.
-
-    *Kevin Deisz*
-
-*   Add a bang version to `ActiveSupport::OrderedOptions` get methods which will raise
-    an `KeyError` if the value is `.blank?`
+*   Add subsec to `ActiveSupport::TimeWithZone#inspect`.
 
     Before:
 
-        if (slack_url = Rails.application.secrets.slack_url).present?
-          # Do something worthwhile
-        else
-          # Raise as important secret password is not specified
-        end
+        Time.at(1498099140).in_time_zone.inspect
+        # => "Thu, 22 Jun 2017 02:39:00 UTC +00:00"
+        Time.at(1498099140, 123456780, :nsec).in_time_zone.inspect
+        # => "Thu, 22 Jun 2017 02:39:00 UTC +00:00"
+        Time.at(1498099140 + Rational("1/3")).in_time_zone.inspect
+        # => "Thu, 22 Jun 2017 02:39:00 UTC +00:00"
 
     After:
 
-        slack_url = Rails.application.secrets.slack_url!
+        Time.at(1498099140).in_time_zone.inspect
+        # => "Thu, 22 Jun 2017 02:39:00.000000000 UTC +00:00"
+        Time.at(1498099140, 123456780, :nsec).in_time_zone.inspect
+        # => "Thu, 22 Jun 2017 02:39:00.123456780 UTC +00:00"
+        Time.at(1498099140 + Rational("1/3")).in_time_zone.inspect
+        # => "Thu, 22 Jun 2017 02:39:00.333333333 UTC +00:00"
 
-    *Aditya Sanghi*, *Gaurish Sharma*
+    *akinomaeni*
 
-*   Remove deprecated `Class#superclass_delegating_accessor`.
-    Use `Class#class_attribute` instead.
+*   Calling `ActiveSupport::TaggedLogging#tagged` without a block now returns a tagged logger.
 
-    *Akshay Vishnoi*
+    ```ruby
+    logger.tagged("BCX").info("Funky time!") # => [BCX] Funky time!
+    ```
 
-*   Patch `Delegator` to work with `#try`.
+    *Eugene Kenny*
 
-    Fixes #5790.
+*   Align `Range#cover?` extension behavior with Ruby behavior for backwards ranges.
 
-    *Nate Smith*
+    `(1..10).cover?(5..3)` now returns `false`, as it does in plain Ruby.
 
-*   Add `Integer#positive?` and `Integer#negative?` query methods
-    in the vein of `Fixnum#zero?`.
+    Also update `#include?` and `#===` behavior to match.
 
-    This makes it nicer to do things like `bunch_of_numbers.select(&:positive?)`.
+    *Michael Groeneman*
 
-    *DHH*
+*   Update to TZInfo v2.0.0.
 
-*   Encoding `ActiveSupport::TimeWithZone` to YAML now preserves the timezone information.
+    This changes the output of `ActiveSupport::TimeZone.utc_to_local`, but
+    can be controlled with the
+    `ActiveSupport.utc_to_local_returns_utc_offset_times` config.
 
-    Fixes #9183.
+    New Rails 6.1 apps have it enabled by default, existing apps can upgrade
+    via the config in config/initializers/new_framework_defaults_6_1.rb
 
-    *Andrew White*
+    See the `utc_to_local_returns_utc_offset_times` documentation for details.
 
-*   Added `ActiveSupport::TimeZone#strptime` to allow parsing times as if
-    from a given timezone.
+    *Phil Ross*, *Jared Beck*
 
-    *Paul A Jungwirth*
+*   Add Date and Time `#yesterday?` and `#tomorrow?` alongside `#today?`.
 
-*   `ActiveSupport::Callbacks#skip_callback` now raises an `ArgumentError` if
-    an unrecognized callback is removed.
+    Aliased to `#prev_day?` and `#next_day?` to match the existing `#prev/next_day` methods.
+
+    *Jatin Dhankhar*
+
+*   Add `Enumerable#pick` to complement `ActiveRecord::Relation#pick`.
+
+    *Eugene Kenny*
+
+*   [Breaking change] `ActiveSupport::Callbacks#halted_callback_hook` now receive a 2nd argument:
+
+    `ActiveSupport::Callbacks#halted_callback_hook` now receive the name of the callback
+    being halted as second argument.
+    This change will allow you to differentiate which callbacks halted the chain
+    and act accordingly.
+
+    ```ruby
+      class Book < ApplicationRecord
+        before_save { throw(:abort) }
+        before_create { throw(:abort) }
+
+        def halted_callback_hook(filter, callback_name)
+          Rails.logger.info("Book couldn't be #{callback_name}d")
+        end
+
+        Book.create # => "Book couldn't be created"
+        book.save # => "Book couldn't be saved"
+      end
+    ```
+
+    *Edouard Chin*
+
+*   Support `prepend` with `ActiveSupport::Concern`.
+
+    Allows a module with `extend ActiveSupport::Concern` to be prepended.
+
+        module Imposter
+          extend ActiveSupport::Concern
+
+          # Same as `included`, except only run when prepended.
+          prepended do
+          end
+        end
+
+        class Person
+          prepend Imposter
+        end
+
+    Class methods are prepended to the base class, concerning is also
+    updated: `concerning :Imposter, prepend: true do`.
+
+    *Jason Karns*, *Elia Schito*
+
+*   Deprecate using `Range#include?` method to check the inclusion of a value
+    in a date time range. It is recommended to use `Range#cover?` method
+    instead of `Range#include?` to check the inclusion of a value
+    in a date time range.
+
+    *Vishal Telangre*
+
+*   Support added for a `round_mode` parameter, in all number helpers. (See: `BigDecimal::mode`.)
+
+    ```ruby
+    number_to_currency(1234567890.50, precision: 0, round_mode: :half_down) # => "$1,234,567,890"
+    number_to_percentage(302.24398923423, precision: 5, round_mode: :down) # => "302.24398%"
+    number_to_rounded(389.32314, precision: 0, round_mode: :ceil) # => "390"
+    number_to_human_size(483989, precision: 2, round_mode: :up) # => "480 KB"
+    number_to_human(489939, precision: 2, round_mode: :floor) # => "480 Thousand"
+
+    485000.to_s(:human, precision: 2, round_mode: :half_even) # => "480 Thousand"
+    ```
+
+    *Tom Lord*
+
+*   `Array#to_sentence` no longer returns a frozen string.
+
+    Before:
+
+        ['one', 'two'].to_sentence.frozen?
+        # => true
+
+    After:
+
+        ['one', 'two'].to_sentence.frozen?
+        # => false
+
+    *Nicolas Dular*
+
+*   When an instance of `ActiveSupport::Duration` is converted to an `iso8601` duration string, if `weeks` are mixed with `date` parts, the `week` part will be converted to days.
+    This keeps the parser and serializer on the same page.
+
+    ```ruby
+    duration = ActiveSupport::Duration.build(1000000)
+    # 1 week, 4 days, 13 hours, 46 minutes, and 40.0 seconds
+
+    duration_iso = duration.iso8601
+    # P11DT13H46M40S
+
+    ActiveSupport::Duration.parse(duration_iso)
+    # 11 days, 13 hours, 46 minutes, and 40 seconds
+
+    duration = ActiveSupport::Duration.build(604800)
+    # 1 week
+
+    duration_iso = duration.iso8601
+    # P1W
+
+    ActiveSupport::Duration.parse(duration_iso)
+    # 1 week
+    ```
+
+    *Abhishek Sarkar*
+
+*   Add block support to `ActiveSupport::Testing::TimeHelpers#travel_back`.
+
+    *Tim Masliuchenko*
+
+*   Update `ActiveSupport::Messages::Metadata#fresh?` to work for cookies with expiry set when
+    `ActiveSupport.parse_json_times = true`.
+
+    *Christian Gregg*
+
+*   Support symbolic links for `content_path` in `ActiveSupport::EncryptedFile`.
+
+    *Takumi Shotoku*
+
+*   Improve `Range#===`, `Range#include?`, and `Range#cover?` to work with beginless (startless)
+    and endless range targets.
+
+    *Allen Hsu*, *Andrew Hodgkinson*
+
+*   Don't use `Process#clock_gettime(CLOCK_THREAD_CPUTIME_ID)` on Solaris.
 
     *Iain Beeston*
 
-*   Added `ActiveSupport::ArrayInquirer` and `Array#inquiry`.
+*   Prevent `ActiveSupport::Duration.build(value)` from creating instances of
+    `ActiveSupport::Duration` unless `value` is of type `Numeric`.
 
-    Wrapping an array in an `ArrayInquirer` gives a friendlier way to check its
-    contents:
-
-        variants = ActiveSupport::ArrayInquirer.new([:phone, :tablet])
-
-        variants.phone?    # => true
-        variants.tablet?   # => true
-        variants.desktop?  # => false
-
-        variants.any?(:phone, :tablet)   # => true
-        variants.any?(:phone, :desktop)  # => true
-        variants.any?(:desktop, :watch)  # => false
-
-    `Array#inquiry` is a shortcut for wrapping the receiving array in an
-    `ArrayInquirer`.
-
-    *George Claghorn*
-
-*   Deprecate `alias_method_chain` in favour of `Module#prepend` introduced in
-    Ruby 2.0.
-
-    *Kir Shatrov*
-
-*   Added `#without` on `Enumerable` and `Array` to return a copy of an
-    enumerable without the specified elements.
-
-    *Todd Bealmear*
-
-*   Fixed a problem where `String#truncate_words` would get stuck with a complex
-    string.
-
-    *Henrik Nygren*
-
-*   Fixed a roundtrip problem with `AS::SafeBuffer` where primitive-like strings
-    will be dumped as primitives:
+    Addresses the errant set of behaviours described in #37012 where
+    `ActiveSupport::Duration` comparisons would fail confusingly
+    or return unexpected results when comparing durations built from instances of `String`.
 
     Before:
 
-        YAML.load ActiveSupport::SafeBuffer.new("Hello").to_yaml  # => "Hello"
-        YAML.load ActiveSupport::SafeBuffer.new("true").to_yaml   # => true
-        YAML.load ActiveSupport::SafeBuffer.new("false").to_yaml  # => false
-        YAML.load ActiveSupport::SafeBuffer.new("1").to_yaml      # => 1
-        YAML.load ActiveSupport::SafeBuffer.new("1.1").to_yaml    # => 1.1
+        small_duration_from_string = ActiveSupport::Duration.build('9')
+        large_duration_from_string = ActiveSupport::Duration.build('100000000000000')
+        small_duration_from_int = ActiveSupport::Duration.build(9)
+
+        large_duration_from_string > small_duration_from_string
+        # => false
+
+        small_duration_from_string == small_duration_from_int
+        # => false
+
+        small_duration_from_int < large_duration_from_string
+        # => ArgumentError (comparison of ActiveSupport::Duration::Scalar with ActiveSupport::Duration failed)
+
+        large_duration_from_string > small_duration_from_int
+        # => ArgumentError (comparison of String with ActiveSupport::Duration failed)
 
     After:
 
-        YAML.load ActiveSupport::SafeBuffer.new("Hello").to_yaml  # => "Hello"
-        YAML.load ActiveSupport::SafeBuffer.new("true").to_yaml   # => "true"
-        YAML.load ActiveSupport::SafeBuffer.new("false").to_yaml  # => "false"
-        YAML.load ActiveSupport::SafeBuffer.new("1").to_yaml      # => "1"
-        YAML.load ActiveSupport::SafeBuffer.new("1.1").to_yaml    # => "1.1"
+        small_duration_from_string = ActiveSupport::Duration.build('9')
+        # => TypeError (can't build an ActiveSupport::Duration from a String)
 
-    *Godfrey Chan*
+    *Alexei Emam*
 
-*   Enable `number_to_percentage` to keep the number's precision by allowing
-    `:precision` to be `nil`.
+*   Add `ActiveSupport::Cache::Store#delete_multi` method to delete multiple keys from the cache store.
 
-    *Jack Xu*
+    *Peter Zhu*
 
-*   `config_accessor` became a private method, as with Ruby's `attr_accessor`.
+*   Support multiple arguments in `HashWithIndifferentAccess` for `merge` and `update` methods, to
+    follow Ruby 2.6 addition.
 
-    *Akira Matsuda*
+    *Wojciech Wnętrzak*
 
-*   `AS::Testing::TimeHelpers#travel_to` now changes `DateTime.now` as well as
-    `Time.now` and `Date.today`.
+*   Allow initializing `thread_mattr_*` attributes via `:default` option.
 
-    *Yuki Nishijima*
+        class Scraper
+          thread_mattr_reader :client, default: Api::Client.new
+        end
 
-*   Add `file_fixture` to `ActiveSupport::TestCase`.
-    It provides a simple mechanism to access sample files in your test cases.
+    *Guilherme Mansur*
 
-    By default file fixtures are stored in `test/fixtures/files`. This can be
-    configured per test-case using the `file_fixture_path` class attribute.
+*   Add `compact_blank` for those times when you want to remove #blank? values from
+    an Enumerable (also `compact_blank!` on Hash, Array, ActionController::Parameters).
 
-    *Yves Senn*
+    *Dana Sherson*
 
-*   Return value of yielded block in `File.atomic_write`.
+*   Make ActiveSupport::Logger Fiber-safe.
 
-    *Ian Ker-Seymer*
-
-*   Duplicate frozen array when assigning it to a `HashWithIndifferentAccess` so
-    that it doesn't raise a `RuntimeError` when calling `map!` on it in `convert_value`.
-
-    Fixes #18550.
-
-    *Aditya Kapoor*
-
-*   Add missing time zone definitions for Russian Federation and sync them
-    with `zone.tab` file from tzdata version 2014j (latest).
-
-    *Andrey Novikov*
-
-*   Add `SecureRandom.base58` for generation of random base58 strings.
-
-    *Matthew Draper*, *Guillermo Iguaran*
-
-*   Add `#prev_day` and `#next_day` counterparts to `#yesterday` and
-    `#tomorrow` for `Date`, `Time`, and `DateTime`.
-
-    *George Claghorn*
-
-*   Add `same_time` option to `#next_week` and `#prev_week` for `Date`, `Time`,
-    and `DateTime`.
-
-    *George Claghorn*
-
-*   Add `#on_weekend?`, `#next_weekday`, `#prev_weekday` methods to `Date`,
-    `Time`, and `DateTime`.
-
-    `#on_weekend?` returns `true` if the receiving date/time falls on a Saturday
-    or Sunday.
-
-    `#next_weekday` returns a new date/time representing the next day that does
-    not fall on a Saturday or Sunday.
-
-    `#prev_weekday` returns a new date/time representing the previous day that
-    does not fall on a Saturday or Sunday.
-
-    *George Claghorn*
-
-*   Change the default test order from `:sorted` to `:random`.
-
-    *Rafael Mendonça França*
-
-*   Remove deprecated `ActiveSupport::JSON::Encoding::CircularReferenceError`.
-
-    *Rafael Mendonça França*
-
-*   Remove deprecated methods `ActiveSupport::JSON::Encoding.encode_big_decimal_as_string=`
-    and `ActiveSupport::JSON::Encoding.encode_big_decimal_as_string`.
-
-    *Rafael Mendonça França*
-
-*   Remove deprecated `ActiveSupport::SafeBuffer#prepend`.
-
-    *Rafael Mendonça França*
-
-*   Remove deprecated methods at `Kernel`.
-
-    `silence_stderr`, `silence_stream`, `capture` and `quietly`.
-
-    *Rafael Mendonça França*
-
-*   Remove deprecated `active_support/core_ext/big_decimal/yaml_conversions`
-    file.
-
-    *Rafael Mendonça França*
-
-*   Remove deprecated methods `ActiveSupport::Cache::Store.instrument` and
-    `ActiveSupport::Cache::Store.instrument=`.
-
-    *Rafael Mendonça França*
-
-*   Change the way in which callback chains can be halted.
-
-    The preferred method to halt a callback chain from now on is to explicitly
-    `throw(:abort)`.
-    In the past, callbacks could only be halted by explicitly providing a
-    terminator and by having a callback match the conditions of the terminator.
-
-*   Add `Callbacks::CallbackChain.halt_and_display_warning_on_return_false`
-
-    Setting `Callbacks::CallbackChain.halt_and_display_warning_on_return_false`
-    to `true` will let an app support the deprecated way of halting Active Record,
-    Active Model and Active Model validations callback chains by returning `false`.
-
-    Setting the value to `false` will tell the app to ignore any `false` value
-    returned by those callbacks, and only halt the chain upon `throw(:abort)`.
-
-    The value can also be set with the Rails configuration option
-    `config.active_support.halt_callback_chains_on_return_false`.
-
-    When the configuration option is missing, its value is `true`, so older apps
-    ported to Rails 5.0 will not break (but display a deprecation warning).
-    For new Rails 5.0 apps, its value is set to `false` in an initializer, so
-    these apps will support the new behavior by default.
-
-    *claudiob*, *Roque Pinel*
-
-*   Changes arguments and default value of CallbackChain's `:terminator` option
-
-    Chains of callbacks defined without an explicit `:terminator` option will
-    now be halted as soon as a `before_` callback throws `:abort`.
-
-    Chains of callbacks defined with a `:terminator` option will maintain their
-    existing behavior of halting as soon as a `before_` callback matches the
-    terminator's expectation.
-
-    *claudiob*
-
-*   Deprecate `MissingSourceFile` in favor of `LoadError`.
-
-    `MissingSourceFile` was just an alias to `LoadError` and was not being
-    raised inside the framework.
-
-    *Rafael Mendonça França*
-
-*   Add support for error dispatcher classes in `ActiveSupport::Rescuable`.
-    Now it acts closer to Ruby's rescue.
+    Use `Fiber.current.__id__` in `ActiveSupport::Logger#local_level=` in order
+    to make log level local to Ruby Fibers in addition to Threads.
 
     Example:
 
-        class BaseController < ApplicationController
-          module ErrorDispatcher
-            def self.===(other)
-              Exception === other && other.respond_to?(:status)
-            end
-          end
+        logger = ActiveSupport::Logger.new(STDOUT)
+        logger.level = 1
+        puts "Main is debug? #{logger.debug?}"
 
-          rescue_from ErrorDispatcher do |error|
-            render status: error.status, json: { error: error.to_s }
-          end
-        end
+        Fiber.new {
+          logger.local_level = 0
+          puts "Thread is debug? #{logger.debug?}"
+        }.resume
 
-    *Genadi Samokovarov*
+        puts "Main is debug? #{logger.debug?}"
 
-*   Add `#verified` and `#valid_message?` methods to `ActiveSupport::MessageVerifier`
+    Before:
 
-    Previously, the only way to decode a message with `ActiveSupport::MessageVerifier`
-    was to use `#verify`, which would raise an exception on invalid messages. Now
-    `#verified` can also be used, which returns `nil` on messages that cannot be
-    decoded.
+        Main is debug? false
+        Thread is debug? true
+        Main is debug? true
 
-    Previously, there was no way to check if a message's format was valid without
-    attempting to decode it. `#valid_message?` is a boolean convenience method that
-    checks whether the message is valid without actually decoding it.
+    After:
 
-    *Logan Leger*
+        Main is debug? false
+        Thread is debug? true
+        Main is debug? false
 
-Please check [4-2-stable](https://github.com/rails/rails/blob/4-2-stable/activesupport/CHANGELOG.md) for previous changes.
+    Fixes #36752.
+
+    *Alexander Varnin*
+
+*   Allow the `on_rotation` proc used when decrypting/verifying a message to be
+    passed at the constructor level.
+
+    Before:
+
+        crypt = ActiveSupport::MessageEncryptor.new('long_secret')
+        crypt.decrypt_and_verify(encrypted_message, on_rotation: proc { ... })
+        crypt.decrypt_and_verify(another_encrypted_message, on_rotation: proc { ... })
+
+    After:
+
+        crypt = ActiveSupport::MessageEncryptor.new('long_secret', on_rotation: proc { ... })
+        crypt.decrypt_and_verify(encrypted_message)
+        crypt.decrypt_and_verify(another_encrypted_message)
+
+    *Edouard Chin*
+
+*   `delegate_missing_to` would raise a `DelegationError` if the object
+    delegated to was `nil`. Now the `allow_nil` option has been added to enable
+    the user to specify they want `nil` returned in this case.
+
+    *Matthew Tanous*
+
+*   `truncate` would return the original string if it was too short to be truncated
+    and a frozen string if it were long enough to be truncated. Now truncate will
+    consistently return an unfrozen string regardless. This behavior is consistent
+    with `gsub` and `strip`.
+
+    Before:
+
+        'foobar'.truncate(5).frozen?
+        # => true
+        'foobar'.truncate(6).frozen?
+        # => false
+
+    After:
+
+        'foobar'.truncate(5).frozen?
+        # => false
+        'foobar'.truncate(6).frozen?
+        # => false
+
+    *Jordan Thomas*
+
+
+Please check [6-0-stable](https://github.com/rails/rails/blob/6-0-stable/activesupport/CHANGELOG.md) for previous changes.

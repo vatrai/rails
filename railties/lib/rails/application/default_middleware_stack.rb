@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Rails
   class Application
     class DefaultMiddlewareStack
@@ -10,15 +12,20 @@ module Rails
       end
 
       def build_stack
-        ActionDispatch::MiddlewareStack.new.tap do |middleware|
+        ActionDispatch::MiddlewareStack.new do |middleware|
+          middleware.use ::ActionDispatch::HostAuthorization, config.hosts, config.action_dispatch.hosts_response_app
+
           if config.force_ssl
-            middleware.use ::ActionDispatch::SSL, config.ssl_options
+            middleware.use ::ActionDispatch::SSL, **config.ssl_options,
+              ssl_default_redirect_status: config.action_dispatch.ssl_default_redirect_status
           end
 
           middleware.use ::Rack::Sendfile, config.action_dispatch.x_sendfile_header
 
-          if config.serve_static_files
-            middleware.use ::ActionDispatch::Static, paths["public"].first, config.static_cache_control, index: config.static_index
+          if config.public_file_server.enabled
+            headers = config.public_file_server.headers || {}
+
+            middleware.use ::ActionDispatch::Static, paths["public"].first, index: config.public_file_server.index_name, headers: headers
           end
 
           if rack_cache = load_rack_cache
@@ -31,67 +38,57 @@ module Rails
             # handling: presumably their code is not threadsafe
 
             middleware.use ::Rack::Lock
-
-          elsif config.allow_concurrency == :unsafe
-            # Do nothing, even if we know this is dangerous. This is the
-            # historical behaviour for true.
-
-          else
-            # Default concurrency setting: enabled, but safe
-
-            unless config.cache_classes && config.eager_load
-              # Without cache_classes + eager_load, the load interlock
-              # is required for proper operation
-
-              middleware.use ::ActionDispatch::LoadInterlock
-            end
           end
+
+          middleware.use ::ActionDispatch::Executor, app.executor
 
           middleware.use ::Rack::Runtime
           middleware.use ::Rack::MethodOverride unless config.api_only
           middleware.use ::ActionDispatch::RequestId
-
-          # Must come after Rack::MethodOverride to properly log overridden methods
-          middleware.use ::Rails::Rack::Logger, config.log_tags
-          middleware.use ::ActionDispatch::ShowExceptions, show_exceptions_app
-          middleware.use ::ActionDispatch::DebugExceptions, app
           middleware.use ::ActionDispatch::RemoteIp, config.action_dispatch.ip_spoofing_check, config.action_dispatch.trusted_proxies
 
+          middleware.use ::Rails::Rack::Logger, config.log_tags
+          middleware.use ::ActionDispatch::ShowExceptions, show_exceptions_app
+          middleware.use ::ActionDispatch::DebugExceptions, app, config.debug_exception_response_format
+          middleware.use ::ActionDispatch::ActionableExceptions
+
           unless config.cache_classes
-            middleware.use ::ActionDispatch::Reloader, lambda { reload_dependencies? }
+            middleware.use ::ActionDispatch::Reloader, app.reloader
           end
 
           middleware.use ::ActionDispatch::Callbacks
           middleware.use ::ActionDispatch::Cookies unless config.api_only
 
           if !config.api_only && config.session_store
-            if config.force_ssl && !config.session_options.key?(:secure)
+            if config.force_ssl && config.ssl_options.fetch(:secure_cookies, true) && !config.session_options.key?(:secure)
               config.session_options[:secure] = true
             end
             middleware.use config.session_store, config.session_options
             middleware.use ::ActionDispatch::Flash
           end
 
+          unless config.api_only
+            middleware.use ::ActionDispatch::ContentSecurityPolicy::Middleware
+            middleware.use ::ActionDispatch::FeaturePolicy::Middleware
+          end
+
           middleware.use ::Rack::Head
           middleware.use ::Rack::ConditionalGet
           middleware.use ::Rack::ETag, "no-cache"
+
+          middleware.use ::Rack::TempfileReaper unless config.api_only
         end
       end
 
       private
-
-        def reload_dependencies?
-          config.reload_classes_only_on_change != true || app.reloaders.map(&:updated?).any?
-        end
-
         def load_rack_cache
           rack_cache = config.action_dispatch.rack_cache
           return unless rack_cache
 
           begin
-            require 'rack/cache'
+            require "rack/cache"
           rescue LoadError => error
-            error.message << ' Be sure to add rack-cache to your Gemfile'
+            error.message << " Be sure to add rack-cache to your Gemfile"
             raise
           end
 

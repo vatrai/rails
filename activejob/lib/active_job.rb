@@ -1,5 +1,7 @@
+# frozen_string_literal: true
+
 #--
-# Copyright (c) 2014-2015 David Heinemeier Hansson
+# Copyright (c) 2014-2020 David Heinemeier Hansson
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -21,18 +23,18 @@
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #++
 
-require 'active_support'
-require 'active_support/rails'
-require 'active_job/version'
-require 'global_id'
+require "active_support"
+require "active_support/rails"
+require "active_job/version"
+require "global_id"
 
 module ActiveJob
   extend ActiveSupport::Autoload
 
   autoload :Base
   autoload :QueueAdapters
+  autoload :Serializers
   autoload :ConfiguredJob
-  autoload :AsyncJob
   autoload :TestCase
   autoload :TestHelper
 end

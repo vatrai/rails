@@ -1,8 +1,6 @@
-require 'active_support/core_ext/module/anonymous'
-require 'active_support/core_ext/string/inflections'
+# frozen_string_literal: true
 
-class Module
-  def reachable? #:nodoc:
-    !anonymous? && name.safe_constantize.equal?(self)
-  end
-end
+require "active_support/core_ext/module/anonymous"
+require "active_support/core_ext/string/inflections"
+
+ActiveSupport::Deprecation.warn("reachable is deprecated and will be removed from the framework.")

@@ -1,9 +1,8 @@
-require 'active_support/core_ext/array/extract_options'
-require 'active_support/core_ext/hash/keys'
-require 'active_support/core_ext/hash/except'
+# frozen_string_literal: true
+
+require "active_support/core_ext/array/extract_options"
 
 module ActiveModel
-
   # == Active \Model \Validations
   #
   # Provides a full validation framework to your objects.
@@ -16,7 +15,7 @@ module ActiveModel
   #     attr_accessor :first_name, :last_name
   #
   #     validates_each :first_name, :last_name do |record, attr, value|
-  #       record.errors.add attr, 'starts with z.' if value.to_s[0] == ?z
+  #       record.errors.add attr, "starts with z." if value.start_with?("z")
   #     end
   #   end
   #
@@ -47,10 +46,10 @@ module ActiveModel
       include HelperMethods
 
       attr_accessor :validation_context
+      private :validation_context=
       define_callbacks :validate, scope: :name
 
-      class_attribute :_validators
-      self._validators = Hash.new { |h,k| h[k] = [] }
+      class_attribute :_validators, instance_writer: false, default: Hash.new { |h, k| h[k] = [] }
     end
 
     module ClassMethods
@@ -62,13 +61,13 @@ module ActiveModel
       #     attr_accessor :first_name, :last_name
       #
       #     validates_each :first_name, :last_name, allow_blank: true do |record, attr, value|
-      #       record.errors.add attr, 'starts with z.' if value.to_s[0] == ?z
+      #       record.errors.add attr, "starts with z." if value.start_with?("z")
       #     end
       #   end
       #
       # Options:
       # * <tt>:on</tt> - Specifies the contexts where this validation is active.
-      #   Runs in all validation contexts by default (nil). You can pass a symbol
+      #   Runs in all validation contexts by default +nil+. You can pass a symbol
       #   or an array of symbols. (e.g. <tt>on: :create</tt> or
       #   <tt>on: :custom_validation_context</tt> or
       #   <tt>on: [:create, :custom_validation_context]</tt>)
@@ -134,7 +133,7 @@ module ActiveModel
       #
       # Options:
       # * <tt>:on</tt> - Specifies the contexts where this validation is active.
-      #   Runs in all validation contexts by default (nil). You can pass a symbol
+      #   Runs in all validation contexts by default +nil+. You can pass a symbol
       #   or an array of symbols. (e.g. <tt>on: :create</tt> or
       #   <tt>on: :custom_validation_context</tt> or
       #   <tt>on: [:create, :custom_validation_context]</tt>)
@@ -147,6 +146,9 @@ module ActiveModel
       #   or <tt>unless: Proc.new { |user| user.signup_step <= 2 }</tt>). The
       #   method, proc or string should return or evaluate to a +true+ or +false+
       #   value.
+      #
+      # NOTE: Calling +validate+ multiple times on the same method will overwrite previous definitions.
+      #
       def validate(*args, &block)
         options = args.extract_options!
 
@@ -160,14 +162,14 @@ module ActiveModel
 
         if options.key?(:on)
           options = options.dup
+          options[:on] = Array(options[:on])
           options[:if] = Array(options[:if])
           options[:if].unshift ->(o) {
-            !(Array(options[:on]) & Array(o.validation_context)).empty?
+            !(options[:on] & Array(o.validation_context)).empty?
           }
         end
 
-        args << options
-        set_callback(:validate, *args, &block)
+        set_callback(:validate, *args, options, &block)
       end
 
       # List all validators that are being used to validate the model using
@@ -303,8 +305,6 @@ module ActiveModel
     # Runs all the specified validations and returns +true+ if no errors were
     # added otherwise +false+.
     #
-    # Aliased as validate.
-    #
     #   class Person
     #     include ActiveModel::Validations
     #
@@ -401,14 +401,13 @@ module ActiveModel
     #   end
     alias :read_attribute_for_validation :send
 
-  protected
-
-    def run_validations! #:nodoc:
+  private
+    def run_validations!
       _run_validate_callbacks
       errors.empty?
     end
 
-    def raise_validation_error
+    def raise_validation_error # :doc:
       raise(ValidationError.new(self))
     end
   end
@@ -434,4 +433,4 @@ module ActiveModel
   end
 end
 
-Dir[File.dirname(__FILE__) + "/validations/*.rb"].each { |file| require file }
+Dir[File.expand_path("validations/*.rb", __dir__)].each { |file| require file }

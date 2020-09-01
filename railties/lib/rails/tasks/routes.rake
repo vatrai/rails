@@ -1,7 +1,9 @@
-desc 'Print out all defined routes in match order, with names. Target specific controller with CONTROLLER=x.'
+# frozen_string_literal: true
+
+require "rails/command"
+require "active_support/deprecation"
+
 task routes: :environment do
-  all_routes = Rails.application.routes.routes
-  require 'action_dispatch/routing/inspector'
-  inspector = ActionDispatch::Routing::RoutesInspector.new(all_routes)
-  puts inspector.format(ActionDispatch::Routing::ConsoleFormatter.new, ENV['CONTROLLER'])
+  ActiveSupport::Deprecation.warn("Using `bin/rake routes` is deprecated and will be removed in Rails 6.1. Use `bin/rails routes` instead.\n")
+  Rails::Command.invoke "routes"
 end

@@ -1,14 +1,15 @@
+# frozen_string_literal: true
+
 require "active_model/validations/clusivity"
 
 module ActiveModel
-
   module Validations
     class InclusionValidator < EachValidator # :nodoc:
       include Clusivity
 
       def validate_each(record, attribute, value)
         unless include?(record, value)
-          record.errors.add(attribute, :inclusion, options.except(:in, :within).merge!(value: value))
+          record.errors.add(attribute, :inclusion, **options.except(:in, :within).merge!(value: value))
         end
       end
     end
@@ -18,7 +19,7 @@ module ActiveModel
       # particular enumerable object.
       #
       #   class Person < ActiveRecord::Base
-      #     validates_inclusion_of :gender, in: %w( m f )
+      #     validates_inclusion_of :role, in: %w( admin contributor )
       #     validates_inclusion_of :age, in: 0..99
       #     validates_inclusion_of :format, in: %w( jpg gif png ), message: "extension %{value} is not included in the list"
       #     validates_inclusion_of :states, in: ->(person) { STATES[person.country] }
@@ -37,7 +38,7 @@ module ActiveModel
       #
       # There is also a list of default options supported by every validator:
       # +:if+, +:unless+, +:on+, +:allow_nil+, +:allow_blank+, and +:strict+.
-      # See <tt>ActiveModel::Validation#validates</tt> for more information
+      # See <tt>ActiveModel::Validations#validates</tt> for more information
       def validates_inclusion_of(*attr_names)
         validates_with InclusionValidator, _merge_attributes(attr_names)
       end
